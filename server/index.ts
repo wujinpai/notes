@@ -75,6 +75,11 @@ import {
   isAiAvailable,
 } from "./ai.js";
 import {
+  consumeCaptchaToken,
+  createSliderChallenge,
+  verifySliderChallenge,
+} from "./slider-captcha.js";
+import {
   addWechatDraft,
   clearWechatAccessToken,
   getWechatAccessToken,
@@ -123,8 +128,15 @@ interface WechatRequestBody {
 }
 
 interface LoginRequestBody {
+  captchaToken?: string;
   password?: string;
   remember?: boolean;
+  username?: string;
+}
+
+interface RegisterRequestBody {
+  captchaToken?: string;
+  password?: string;
   username?: string;
 }
 
@@ -636,6 +648,18 @@ function getPublicAuthUser(user: AuthUser): AuthUser {
     role: user.role,
     username: user.username,
   };
+}
+
+function requireCaptchaToken(
+  token: string | undefined,
+  response: Response,
+): boolean {
+  if (!consumeCaptchaToken(token)) {
+    response.status(400).json({ error: "请先完成滑块验证。" });
+    return false;
+  }
+
+  return true;
 }
 
 function resolveLoginCredentials(body: LoginRequestBody | undefined): {
@@ -4125,6 +4149,101 @@ app.get("/api/auth/session", async (request: Request, response: Response) => {
 });
 
 app.post(
+  "/api/auth/slider-challenge",
+  (request: Request, response: Response) => {
+    if (!isSameOriginRequest(request)) {
+      response.status(403).json({ error: "请从当前便签页面完成滑块验证。" });
+      return;
+    }
+
+    response.json(createSliderChallenge());
+  },
+);
+
+app.post(
+  "/api/auth/slider-verify",
+  (
+    request: Request<
+      Record<string, never>,
+      unknown,
+      {
+        challengeId?: unknown;
+        durationMs?: unknown;
+        moveCount?: unknown;
+        positionRatio?: unknown;
+      }
+    >,
+    response: Response,
+  ) => {
+    if (!isSameOriginRequest(request)) {
+      response.status(403).json({ error: "请从当前便签页面完成滑块验证。" });
+      return;
+    }
+
+    const captchaToken = verifySliderChallenge(request.body ?? {});
+
+    if (!captchaToken) {
+      response.status(400).json({ error: "滑块验证未通过，请重试。" });
+      return;
+    }
+
+    response.json({ captchaToken });
+  },
+);
+
+app.post(
+  "/api/auth/register",
+  async (
+    request: Request<Record<string, never>, unknown, RegisterRequestBody>,
+    response: Response,
+  ) => {
+    const username = request.body?.username?.trim();
+    const password = request.body?.password;
+
+    if (!username || typeof password !== "string" || !password) {
+      response.status(400).json({ error: "请输入用户名或邮箱及密码。" });
+      return;
+    }
+
+    if (!requireCaptchaToken(request.body?.captchaToken, response)) {
+      return;
+    }
+
+    try {
+      const account = await notesDataStore.registerUser(username, password);
+      const user: AuthUser = {
+        id: account.id,
+        role: "user",
+        username: account.username,
+      };
+      setAuthenticatedSession(
+        request,
+        response,
+        user,
+        false,
+        account.passwordVersion,
+      );
+      response.json({ user });
+    } catch (error) {
+      if (error instanceof DuplicateUsernameError) {
+        response.status(409).json({ error: error.message });
+        return;
+      }
+
+      if (
+        error instanceof InvalidUsernameError ||
+        error instanceof InvalidNewPasswordError
+      ) {
+        response.status(400).json({ error: error.message });
+        return;
+      }
+
+      response.status(500).json({ error: "注册失败，请稍后重试。" });
+    }
+  },
+);
+
+app.post(
   "/api/auth/login",
   async (
     request: Request<Record<string, never>, unknown, LoginRequestBody>,
@@ -4134,6 +4253,10 @@ app.post(
 
     if (!credentials) {
       response.status(400).json({ error: "请输入用户名或邮箱及密码。" });
+      return;
+    }
+
+    if (!requireCaptchaToken(request.body?.captchaToken, response)) {
       return;
     }
 
@@ -4437,6 +4560,11 @@ app.post(
     }
 
     const credentials = resolveLoginCredentials(request.body);
+
+    if (credentials && !requireCaptchaToken(request.body?.captchaToken, response)) {
+      return;
+    }
+
     const user = authenticateSuperAdmin(credentials);
 
     if (!user) {

@@ -8128,10 +8128,20 @@ body,
   font-size: 16px;
 }
 
-.login-dialog-tabs span {
+.login-dialog-tabs span,
+.login-dialog-tabs button {
   position: relative;
   height: 40px;
   line-height: 40px;
+}
+
+.login-dialog-tabs button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
 }
 
 .login-dialog-tabs .is-active {
@@ -8245,6 +8255,94 @@ body,
   height: 16px;
   margin: 0;
   accent-color: #837570;
+}
+
+.slider-captcha {
+  display: grid;
+  gap: 8px;
+}
+
+.slider-captcha-track {
+  position: relative;
+  height: 48px;
+  border: 1px solid #dedbd9;
+  border-radius: 8px;
+  background: #f9f9f9;
+  box-shadow: inset 0 1px 2px rgba(50, 42, 38, 0.03);
+  overflow: hidden;
+  touch-action: none;
+}
+
+.slider-captcha-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  background: rgba(131, 117, 112, 0.18);
+}
+
+.slider-captcha-target {
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  width: 12%;
+  border: 2px dashed #837570;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.65);
+  box-sizing: border-box;
+}
+
+.slider-captcha-handle {
+  position: absolute;
+  top: 0;
+  width: 12%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: linear-gradient(#81736d, #6f625d);
+  color: #fff;
+  font: 600 16px/48px var(--ui-font);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.slider-captcha-handle:active {
+  cursor: grabbing;
+}
+
+.slider-captcha-handle:disabled {
+  background: #d8d4d2;
+  cursor: default;
+}
+
+.slider-captcha[data-status="passed"] .slider-captcha-handle {
+  background: linear-gradient(#6f8f6a, #5c7a57);
+}
+
+.slider-captcha-message {
+  margin: 0;
+  color: #a29d9a;
+  font-size: 13px;
+  line-height: 20px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.slider-captcha[data-status="passed"] .slider-captcha-message {
+  color: #5c7a57;
+}
+
+.slider-captcha-retry {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #837570;
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
 }
 
 .login-dialog-error {

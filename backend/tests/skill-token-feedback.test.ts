@@ -136,6 +136,36 @@ function createWorkspace(timestamp: number): NoteWorkspace {
   };
 }
 
+
+async function getCaptchaToken(baseUrl: string): Promise<string> {
+  const challengeResponse = await fetch(`${baseUrl}/api/auth/slider-challenge`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({}),
+  });
+  assert.equal(challengeResponse.status, 200);
+  const challenge = (await challengeResponse.json()) as {
+    challengeId: string;
+    targetRatio: number;
+  };
+  const verifyResponse = await fetch(`${baseUrl}/api/auth/slider-verify`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      challengeId: challenge.challengeId,
+      durationMs: 900,
+      moveCount: 8,
+      positionRatio: challenge.targetRatio,
+    }),
+  });
+  assert.equal(verifyResponse.status, 200);
+  const { captchaToken } = (await verifyResponse.json()) as {
+    captchaToken: string;
+  };
+  assert.ok(captchaToken);
+  return captchaToken;
+}
+
 test("Skill Token 可自动换取、持久化、下载 ZIP，并在改密后失效", async (context) => {
   const port = await getUnusedPort();
   const dataDir = await mkdtemp(path.join(tmpdir(), "notes-token-data-"));
@@ -171,6 +201,7 @@ test("Skill Token 可自动换取、持久化、下载 ZIP，并在改密后失�
     await waitForHealth(baseUrl, child);
 
     const adminLogin = await postJson(baseUrl, "/api/superadmin/login", {
+      captchaToken: await getCaptchaToken(baseUrl),
       password: "feedback-admin-password",
       remember: false,
       username: "feedback-admin",
@@ -190,6 +221,7 @@ test("Skill Token 可自动换取、持久化、下载 ZIP，并在改密后失�
     const initialPassword = created.user.initialPassword;
 
     const userLogin = await postJson(baseUrl, "/api/auth/login", {
+      captchaToken: await getCaptchaToken(baseUrl),
       password: initialPassword,
       remember: false,
       username: created.user.username,

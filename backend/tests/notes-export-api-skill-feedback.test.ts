@@ -120,6 +120,36 @@ async function runSkill(
   return JSON.parse(result.stdout) as Record<string, unknown>;
 }
 
+
+async function getCaptchaToken(baseUrl: string): Promise<string> {
+  const challengeResponse = await fetch(`${baseUrl}/api/auth/slider-challenge`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({}),
+  });
+  assert.equal(challengeResponse.status, 200);
+  const challenge = (await challengeResponse.json()) as {
+    challengeId: string;
+    targetRatio: number;
+  };
+  const verifyResponse = await fetch(`${baseUrl}/api/auth/slider-verify`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      challengeId: challenge.challengeId,
+      durationMs: 900,
+      moveCount: 8,
+      positionRatio: challenge.targetRatio,
+    }),
+  });
+  assert.equal(verifyResponse.status, 200);
+  const { captchaToken } = (await verifyResponse.json()) as {
+    captchaToken: string;
+  };
+  assert.ok(captchaToken);
+  return captchaToken;
+}
+
 test("便签管理 Skill 可用账号密码完成增删改查、分类和公众号格式", async (context) => {
   const port = await getUnusedPort();
   const dataDir = await mkdtemp(path.join(tmpdir(), "notes-skill-data-"));
@@ -526,6 +556,7 @@ printf '%s' "$url" > "$FAKE_CURL_LOG"
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        captchaToken: await getCaptchaToken(baseUrl),
         password: "feedback-admin-password",
         username: "feedback-admin",
       }),

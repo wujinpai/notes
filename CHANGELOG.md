@@ -2,6 +2,13 @@
 
 本文件记录锤子便签中值得用户关注的变更，格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [未发布]
+
+### 新增
+
+- 访客可通过登录弹窗自助注册账号（用户名/邮箱与密码规则与现有账号一致），注册成功后自动登录并使用独立的云端工作区。
+- 登录、注册与管理员登录新增滑块验证：拖动滑块到缺口位置通过后才能提交，验证票据一次性且短时有效，提交失败后需重新验证。
+
 ## [1.10.7] - 2026-10-02
 
 ### 修复
@@ -276,6 +283,7 @@
 - PC 版便签操作栏右侧按钮调整为“AI、删除、分享”的顺序，与 APP 版详情操作保持一致。
 - 重置 Hermes 安装链接前会明确提示旧链接立即失效，并要求二次确认，避免误触轮换。
 
+[未发布]: https://github.com/zhaoolee/notes/compare/1.10.7...HEAD
 [1.10.7]: https://github.com/zhaoolee/notes/compare/1.10.6...1.10.7
 [1.10.6]: https://github.com/zhaoolee/notes/compare/1.10.5...1.10.6
 [1.10.5]: https://github.com/zhaoolee/notes/compare/1.10.4...1.10.5

@@ -72,11 +72,70 @@ export async function getAuthSession(): Promise<AuthUser | null> {
   return result.user;
 }
 
+export interface SliderChallenge {
+  challengeId: string;
+  targetRatio: number;
+}
+
+export async function createSliderChallenge(): Promise<SliderChallenge> {
+  return requestJson<SliderChallenge>(
+    "/api/auth/slider-challenge",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({}),
+    },
+    "滑块验证加载失败，请稍后重试。",
+  );
+}
+
+export async function verifySliderCaptcha(input: {
+  challengeId: string;
+  durationMs: number;
+  moveCount: number;
+  positionRatio: number;
+}): Promise<string> {
+  const result = await requestJson<{ captchaToken: string }>(
+    "/api/auth/slider-verify",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(input),
+    },
+    "滑块验证未通过，请重试。",
+  );
+  return result.captchaToken;
+}
+
+export async function registerUser(
+  username: string,
+  password: string,
+  captchaToken: string,
+): Promise<AuthUser> {
+  const result = await requestJson<{ user: AuthUser }>(
+    "/api/auth/register",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ captchaToken, password, username }),
+    },
+    "注册服务暂不可用，请确认后端服务已启动并部署了最新版本。",
+  );
+  return result.user;
+}
+
 async function loginAt(
   url: string,
   username: string,
   password: string,
   remember: boolean,
+  captchaToken: string,
 ): Promise<AuthUser> {
   const result = await requestJson<{ user: AuthUser }>(
     url,
@@ -85,7 +144,7 @@ async function loginAt(
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ password, remember, username }),
+      body: JSON.stringify({ captchaToken, password, remember, username }),
     },
     "登录服务暂不可用，请确认后端服务已启动并部署了最新版本。",
   );
@@ -96,16 +155,18 @@ export function loginUser(
   username: string,
   password: string,
   remember: boolean,
+  captchaToken: string,
 ): Promise<AuthUser> {
-  return loginAt("/api/auth/login", username, password, remember);
+  return loginAt("/api/auth/login", username, password, remember, captchaToken);
 }
 
 export function loginSuperAdmin(
   username: string,
   password: string,
   remember: boolean,
+  captchaToken: string,
 ): Promise<AuthUser> {
-  return loginAt("/api/superadmin/login", username, password, remember);
+  return loginAt("/api/superadmin/login", username, password, remember, captchaToken);
 }
 
 export async function logoutUser(): Promise<void> {

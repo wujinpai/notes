@@ -1,5 +1,7 @@
 import { useState, type FormEvent } from "react";
 import type { AuthUser } from "../lib/auth.js";
+import { registerUser } from "../lib/auth.js";
+import { SliderCaptcha } from "./SliderCaptcha.js";
 
 interface LoginDialogProps {
   isAdmin?: boolean;
@@ -7,10 +9,13 @@ interface LoginDialogProps {
     username: string,
     password: string,
     remember: boolean,
+    captchaToken: string,
   ) => Promise<AuthUser>;
   onAuthenticated: (user: AuthUser) => void | Promise<void>;
   onClose?: () => void;
 }
+
+type LoginMode = "login" | "register";
 
 export function LoginDialog({
   isAdmin = false,
@@ -18,27 +23,63 @@ export function LoginDialog({
   onAuthenticated,
   onClose,
 }: LoginDialogProps) {
+  const [mode, setMode] = useState<LoginMode>("login");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [remember, setRemember] = useState(true);
+  const [captchaToken, setCaptchaToken] = useState("");
+  const [captchaResetKey, setCaptchaResetKey] = useState(0);
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const isRegisterMode = !isAdmin && mode === "register";
+
+  function resetCaptcha() {
+    setCaptchaToken("");
+    setCaptchaResetKey((value) => value + 1);
+  }
+
+  function switchMode(nextMode: LoginMode) {
+    setMode(nextMode);
+    setError("");
+    setConfirmPassword("");
+    resetCaptcha();
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (isSubmitting) {
+    if (isSubmitting || !captchaToken) {
       return;
+    }
+
+    if (isRegisterMode) {
+      if (password.length < 8 || password.length > 128) {
+        setError("新密码长度应为 8–128 个字符。");
+        resetCaptcha();
+        return;
+      }
+
+      if (password !== confirmPassword) {
+        setError("两次输入的密码不一致。");
+        resetCaptcha();
+        return;
+      }
     }
 
     try {
       setIsSubmitting(true);
       setError("");
-      const user = await login(username, password, remember);
+      const user = isRegisterMode
+        ? await registerUser(username, password, captchaToken)
+        : await login(username, password, remember, captchaToken);
       await onAuthenticated(user);
     } catch (loginError) {
       setError(loginError instanceof Error ? loginError.message : "登录失败。");
+      // captchaToken 已被服务端单次消费，失败后必须重新完成滑块验证。
+      resetCaptcha();
     } finally {
       setIsSubmitting(false);
     }
@@ -82,11 +123,32 @@ export function LoginDialog({
           {isAdmin ? "锤子便签后台" : "锤子便签"}
         </h1>
 
-        <div className="login-dialog-tabs" aria-hidden="true">
-          <span className="is-active">
-            {isAdmin ? "管理员登录" : "账号密码登录"}
-          </span>
-        </div>
+        {isAdmin ? (
+          <div className="login-dialog-tabs" aria-hidden="true">
+            <span className="is-active">管理员登录</span>
+          </div>
+        ) : (
+          <div className="login-dialog-tabs" role="tablist" aria-label="登录方式">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === "login"}
+              className={mode === "login" ? "is-active" : ""}
+              onClick={() => switchMode("login")}
+            >
+              账号密码登录
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === "register"}
+              className={mode === "register" ? "is-active" : ""}
+              onClick={() => switchMode("register")}
+            >
+              注册账号
+            </button>
+          </div>
+        )}
 
         <form className="login-dialog-form" onSubmit={handleSubmit}>
           <label>
@@ -108,7 +170,7 @@ export function LoginDialog({
             <input
               type={isPasswordVisible ? "text" : "password"}
               name="password"
-              autoComplete="current-password"
+              autoComplete={isRegisterMode ? "new-password" : "current-password"}
               placeholder="密码"
               value={password}
               required
@@ -132,14 +194,38 @@ export function LoginDialog({
             </button>
           </label>
 
-          <label className="login-dialog-remember">
-            <input
-              type="checkbox"
-              checked={remember}
-              onChange={(event) => setRemember(event.target.checked)}
-            />
-            <span>记住密码</span>
-          </label>
+          {isRegisterMode ? (
+            <label>
+              <span className="visually-hidden">确认密码</span>
+              <input
+                type={isPasswordVisible ? "text" : "password"}
+                name="confirmPassword"
+                autoComplete="new-password"
+                placeholder="确认密码"
+                value={confirmPassword}
+                required
+                minLength={8}
+                maxLength={128}
+                onChange={(event) => setConfirmPassword(event.target.value)}
+              />
+            </label>
+          ) : null}
+
+          <SliderCaptcha
+            resetKey={captchaResetKey}
+            onVerified={(token) => setCaptchaToken(token)}
+          />
+
+          {!isRegisterMode ? (
+            <label className="login-dialog-remember">
+              <input
+                type="checkbox"
+                checked={remember}
+                onChange={(event) => setRemember(event.target.checked)}
+              />
+              <span>记住密码</span>
+            </label>
+          ) : null}
 
           {error ? (
             <p className="login-dialog-error" role="alert">
@@ -150,16 +236,30 @@ export function LoginDialog({
           <button
             type="submit"
             className="login-dialog-submit"
-            disabled={isSubmitting || !username.trim() || !password}
+            disabled={
+              isSubmitting ||
+              !captchaToken ||
+              !username.trim() ||
+              !password ||
+              (isRegisterMode && !confirmPassword)
+            }
           >
-            {isSubmitting ? "登录中..." : "登录"}
+            {isSubmitting
+              ? isRegisterMode
+                ? "注册中..."
+                : "登录中..."
+              : isRegisterMode
+                ? "注册"
+                : "登录"}
           </button>
         </form>
 
         <p className="login-dialog-note">
           {isAdmin
             ? "管理员凭据由服务端环境变量提供。"
-            : "登录后便签自动保存到云端，并支持跨设备同步。"}
+            : isRegisterMode
+              ? "注册后便签自动保存到云端，并支持跨设备同步。"
+              : "登录后便签自动保存到云端，并支持跨设备同步。"}
         </p>
       </section>
     </div>

@@ -36,6 +36,39 @@ test("首页账号密码弹窗支持浏览器密码管理与记住登录", () =>
   assert.match(html, /type="checkbox" checked=""/);
   assert.match(html, /记住密码/);
   assert.match(html, /登录后便签自动保存到云端/);
+  assert.match(html, /注册账号/);
+  assert.match(html, /role="tablist"/);
+  assert.match(html, /class="slider-captcha"/);
+  assert.match(html, /class="slider-captcha-track"/);
+  assert.match(html, /aria-label="拖动滑块完成验证"/);
+  assert.match(html, /正在加载滑块验证/);
+});
+
+test("登录弹窗源码提供自助注册模式与滑块验证接入", () => {
+  const loginSource = readFileSync("src/components/LoginDialog.tsx", "utf8");
+  const sliderSource = readFileSync("src/components/SliderCaptcha.tsx", "utf8");
+  const authSource = readFileSync("src/lib/auth.ts", "utf8");
+  const styles = readFileSync("src/styles.css", "utf8");
+
+  assert.match(loginSource, /账号密码登录/);
+  assert.match(loginSource, /注册账号/);
+  assert.match(loginSource, /确认密码/);
+  assert.match(loginSource, /autoComplete=\{isRegisterMode \? "new-password" : "current-password"\}/);
+  assert.match(loginSource, /name="confirmPassword"/);
+  assert.match(loginSource, /两次输入的密码不一致/);
+  assert.match(loginSource, /<SliderCaptcha/);
+  assert.match(loginSource, /!captchaToken/);
+  assert.match(loginSource, /registerUser\(username, password, captchaToken\)/);
+  assert.match(sliderSource, /createSliderChallenge/);
+  assert.match(sliderSource, /verifySliderCaptcha/);
+  assert.match(sliderSource, /onPointerDown/);
+  assert.match(authSource, /"\/api\/auth\/register"/);
+  assert.match(authSource, /"\/api\/auth\/slider-challenge"/);
+  assert.match(authSource, /"\/api\/auth\/slider-verify"/);
+  assert.match(authSource, /captchaToken/);
+  assert.match(styles, /\.slider-captcha\s*\{/);
+  assert.match(styles, /\.slider-captcha-track\s*\{/);
+  assert.match(styles, /\.slider-captcha-handle\s*\{/);
 });
 
 test("普通用户修改密码表单使用当前密码与新密码语义", () => {

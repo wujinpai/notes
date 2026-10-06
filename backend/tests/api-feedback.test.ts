@@ -147,6 +147,36 @@ async function stopChild(child: ChildProcess): Promise<void> {
   ]);
 }
 
+
+async function getCaptchaToken(baseUrl: string): Promise<string> {
+  const challengeResponse = await fetch(`${baseUrl}/api/auth/slider-challenge`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({}),
+  });
+  assert.equal(challengeResponse.status, 200);
+  const challenge = (await challengeResponse.json()) as {
+    challengeId: string;
+    targetRatio: number;
+  };
+  const verifyResponse = await fetch(`${baseUrl}/api/auth/slider-verify`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      challengeId: challenge.challengeId,
+      durationMs: 900,
+      moveCount: 8,
+      positionRatio: challenge.targetRatio,
+    }),
+  });
+  assert.equal(verifyResponse.status, 200);
+  const { captchaToken } = (await verifyResponse.json()) as {
+    captchaToken: string;
+  };
+  assert.ok(captchaToken);
+  return captchaToken;
+}
+
 test("Express 提供健康检查和内容寻址图片存储", async (context) => {
   assert.match(
     await readFile("server/qiniu.ts", "utf8"),
@@ -728,6 +758,7 @@ test("Express 提供健康检查和内容寻址图片存储", async (context) =>
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          captchaToken: await getCaptchaToken(baseUrl),
           password: "wechat-feedback-password",
           remember: false,
           username: "wechat-feedback-admin",
@@ -772,6 +803,7 @@ test("Express 提供健康检查和内容寻址图片存储", async (context) =>
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        captchaToken: await getCaptchaToken(baseUrl),
         password: createdAccount.user.initialPassword,
         remember: false,
         username: createdAccount.user.username,

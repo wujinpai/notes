@@ -2,6 +2,13 @@
 
 本文件只记录已从代码或 feedback 测试中确认、预计会影响后续任务的信息。临时调试输出和未经验证的推测不写入这里。
 
+## 2026-10-07：自助注册与滑块验证（未发布）
+
+- 登录弹窗新增“注册账号”模式：`POST /api/auth/register` 复用现有账号/密码规则（用户名 3–32 字符或邮箱、密码 8–128 字符），重复账号返回 409，注册成功后自动签发普通用户会话；管理员建号流程不变。
+- `POST /api/auth/login`、`POST /api/superadmin/login`、`POST /api/auth/register` 都必须先消费一次滑块票据：`POST /api/auth/slider-challenge` 签发 120 秒有效、单次使用的 challenge，`POST /api/auth/slider-verify` 校验位置容差 0.045、拖动至少 300ms 且至少 3 次移动后签发 5 分钟有效、单次消费的 captchaToken；`/api/auth/skill-token` 是程序化凭据换取，不要求滑块。
+- 前端 `SliderCaptcha` 用 Pointer Events 统计 moveCount 与首次移动起的时长；缺口位置（targetRatio）对 API 客户端可见是拼图滑块的固有形态，防护主要靠一次性 + 短时效，不声称强机器人识别。
+- 验证结果：`npm run typecheck` 通过，前端 feedback 128 项全部通过，后端 feedback 16 项全部通过（含新增自助注册用例）；完整 `npm test` 中 dsh-plugin 有 2 项因本机缺少 Playwright Chromium 与 dsh-plugin 子模块 typescript 失败，与本次改动无关。
+
 ## 2026-10-02：公众号列表空圆点修复
 
 - Markdown 列表项之间的空行不能经公众号空行保留器转换为 U+2800 占位段落；那会把一组列表拆成多个 `ul`/`ol`，在微信中出现空圆点。公众号渲染现在将相邻列表项合成同一组，列表边界仅保留结构分隔，普通正文空行仍生成完整行高的占位段落。分节边界的列表首尾空行也不输出占位段落。

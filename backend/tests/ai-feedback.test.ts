@@ -72,6 +72,36 @@ function getCookie(response: Response): string {
   return setCookie.split(";")[0];
 }
 
+
+async function getCaptchaToken(baseUrl: string): Promise<string> {
+  const challengeResponse = await fetch(`${baseUrl}/api/auth/slider-challenge`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({}),
+  });
+  assert.equal(challengeResponse.status, 200);
+  const challenge = (await challengeResponse.json()) as {
+    challengeId: string;
+    targetRatio: number;
+  };
+  const verifyResponse = await fetch(`${baseUrl}/api/auth/slider-verify`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      challengeId: challenge.challengeId,
+      durationMs: 900,
+      moveCount: 8,
+      positionRatio: challenge.targetRatio,
+    }),
+  });
+  assert.equal(verifyResponse.status, 200);
+  const { captchaToken } = (await verifyResponse.json()) as {
+    captchaToken: string;
+  };
+  assert.ok(captchaToken);
+  return captchaToken;
+}
+
 test("启动探测成功后只向登录用户返回逐条 AI 建议且不写工作区", async (context) => {
   const appPort = await getUnusedPort();
   const dataDir = await mkdtemp(path.join(tmpdir(), "notes-ai-data-"));
@@ -222,6 +252,7 @@ test("启动探测成功后只向登录用户返回逐条 AI 建议且不写工�
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
+      captchaToken: await getCaptchaToken(baseUrl),
       password: "ai-feedback-password",
       username: "ai-feedback-admin",
     }),

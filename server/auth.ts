@@ -621,6 +621,49 @@ export class NotesDataStore {
     });
   }
 
+  async registerUser(
+    username: string,
+    password: string,
+  ): Promise<AuthenticatedAccount> {
+    return this.runExclusive(async () => {
+      const displayUsername = validateUsername(username);
+      const validatedPassword = validateNewPassword(password);
+      const normalizedUsername = normalizeUsername(displayUsername);
+      const database = await this.readDatabase();
+
+      if (
+        database.users.some(
+          (account) => account.normalizedUsername === normalizedUsername,
+        )
+      ) {
+        throw new DuplicateUsernameError();
+      }
+
+      const hashed = await hashPassword(validatedPassword);
+      const account: StoredAccount = {
+        createdAt: Date.now(),
+        id: randomUUID(),
+        normalizedUsername,
+        passwordHash: hashed.hash,
+        passwordSalt: hashed.salt,
+        passwordVersion: 1,
+        skillTokenVersion: 1,
+        username: displayUsername,
+      };
+
+      database.users.push(account);
+      await this.writeDatabase(database);
+
+      return {
+        createdAt: account.createdAt,
+        id: account.id,
+        passwordVersion: account.passwordVersion,
+        skillTokenVersion: account.skillTokenVersion,
+        username: account.username,
+      };
+    });
+  }
+
   async authenticateUser(
     username: string,
     password: string,

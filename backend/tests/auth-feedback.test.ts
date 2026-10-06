@@ -147,6 +147,35 @@ async function postJson(
   });
 }
 
+async function getCaptchaToken(baseUrl: string): Promise<string> {
+  const challengeResponse = await fetch(`${baseUrl}/api/auth/slider-challenge`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({}),
+  });
+  assert.equal(challengeResponse.status, 200);
+  const challenge = (await challengeResponse.json()) as {
+    challengeId: string;
+    targetRatio: number;
+  };
+  const verifyResponse = await fetch(`${baseUrl}/api/auth/slider-verify`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      challengeId: challenge.challengeId,
+      durationMs: 900,
+      moveCount: 8,
+      positionRatio: challenge.targetRatio,
+    }),
+  });
+  assert.equal(verifyResponse.status, 200);
+  const { captchaToken } = (await verifyResponse.json()) as {
+    captchaToken: string;
+  };
+  assert.ok(captchaToken);
+  return captchaToken;
+}
+
 test("管理员可使用便签服务、创建用户且各账号云工作区严格隔离", async (context) => {
   const port = await getUnusedPort();
   let wechatPort = await getUnusedPort();
@@ -328,6 +357,7 @@ test("管理员可使用便签服务、创建用户且各账号云工作区严�
       baseUrl,
       "/api/superadmin/login",
       {
+        captchaToken: await getCaptchaToken(baseUrl),
         password: "wrong-password",
         remember: true,
         username: "feedback-admin",
@@ -336,6 +366,7 @@ test("管理员可使用便签服务、创建用户且各账号云工作区严�
     assert.equal(wrongAdminLogin.status, 401);
 
     const adminLogin = await postJson(baseUrl, "/api/superadmin/login", {
+      captchaToken: await getCaptchaToken(baseUrl),
       password: "feedback-admin-password",
       remember: true,
       username: "feedback-admin",
@@ -368,6 +399,7 @@ test("管理员可使用便签服务、创建用户且各账号云工作区严�
     assert.equal(adminSave.status, 200);
 
     const adminNotesLogin = await postJson(baseUrl, "/api/auth/login", {
+      captchaToken: await getCaptchaToken(baseUrl),
       password: "feedback-admin-password",
       remember: false,
       username: "FEEDBACK-ADMIN",
@@ -534,6 +566,7 @@ test("管理员可使用便签服务、创建用户且各账号云工作区严�
     assert.doesNotMatch(JSON.stringify(users), /password|salt|hash/i);
 
     const aliceLogin = await postJson(baseUrl, "/api/auth/login", {
+      captchaToken: await getCaptchaToken(baseUrl),
       password: alice.initialPassword,
       remember: false,
       username: "alice",
@@ -880,6 +913,7 @@ test("管理员可使用便签服务、创建用户且各账号云工作区严�
     assert.equal(aliceSave.status, 200);
 
     const bobLogin = await postJson(baseUrl, "/api/auth/login", {
+      captchaToken: await getCaptchaToken(baseUrl),
       password: bob.initialPassword,
       remember: true,
       username: "BOB.USER+SYNC@EXAMPLE.COM",
@@ -1002,6 +1036,7 @@ test("管理员可使用便签服务、创建用户且各账号云工作区严�
     assert.deepEqual(await staleAliceSession.json(), { user: null });
 
     const oldAlicePasswordLogin = await postJson(baseUrl, "/api/auth/login", {
+      captchaToken: await getCaptchaToken(baseUrl),
       password: alice.initialPassword,
       remember: false,
       username: "alice",
@@ -1012,6 +1047,7 @@ test("管理员可使用便签服务、创建用户且各账号云工作区严�
       baseUrl,
       "/api/auth/login",
       {
+        captchaToken: await getCaptchaToken(baseUrl),
         password: aliceChangedPassword,
         remember: false,
         username: "alice",
@@ -1045,6 +1081,7 @@ test("管理员可使用便签服务、创建用户且各账号云工作区严�
       baseUrl,
       "/api/auth/login",
       {
+        captchaToken: await getCaptchaToken(baseUrl),
         password: aliceChangedPassword,
         remember: false,
         username: "alice",
@@ -1053,6 +1090,7 @@ test("管理员可使用便签服务、创建用户且各账号云工作区严�
     assert.equal(changedPasswordAfterReset.status, 401);
 
     const resetPasswordLogin = await postJson(baseUrl, "/api/auth/login", {
+      captchaToken: await getCaptchaToken(baseUrl),
       password: resetAlice.temporaryPassword,
       remember: false,
       username: "alice",
@@ -1086,6 +1124,130 @@ test("管理员可使用便签服务、创建用户且各账号云工作区严�
     assert.match(databaseText, /alice-private/);
     assert.match(databaseText, /bob-private/);
     assert.match(databaseText, /admin-private/);
+  } catch (error) {
+    throw new Error(
+      [
+        error instanceof Error ? error.message : String(error),
+        stdout ? `stdout:\n${stdout}` : "",
+        stderr ? `stderr:\n${stderr}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n"),
+    );
+  }
+});
+
+test("访客自助注册需要滑块验证，注册后可改密并用新密码登录", async (context) => {
+  const port = await getUnusedPort();
+  const dataDir = await mkdtemp(path.join(tmpdir(), "notes-register-data-"));
+  const imageDir = await mkdtemp(path.join(tmpdir(), "notes-register-images-"));
+  const baseUrl = `http://127.0.0.1:${port}`;
+  const child = spawn(
+    process.execPath,
+    ["--import", "tsx", "server/index.ts"],
+    {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        DATA_STORAGE_DIR: dataDir,
+        IMAGE_STORAGE_DIR: imageDir,
+        PORT: String(port),
+        SESSION_SECRET: "feedback-session-secret-with-sufficient-entropy",
+        SUPERADMIN: "feedback-admin",
+        SUPERADMINPASSWORD: "feedback-admin-password",
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  );
+  let stdout = "";
+  let stderr = "";
+  child.stdout?.on("data", (chunk) => {
+    stdout += String(chunk);
+  });
+  child.stderr?.on("data", (chunk) => {
+    stderr += String(chunk);
+  });
+
+  context.after(async () => {
+    await stopChild(child);
+    await rm(dataDir, { force: true, recursive: true });
+    await rm(imageDir, { force: true, recursive: true });
+  });
+
+  try {
+    await waitForHealth(baseUrl, child);
+
+    const registerWithoutCaptcha = await postJson(baseUrl, "/api/auth/register", {
+      password: "register-password-2026",
+      username: "new-visitor",
+    });
+    assert.equal(registerWithoutCaptcha.status, 400);
+
+    const registerResponse = await postJson(baseUrl, "/api/auth/register", {
+      captchaToken: await getCaptchaToken(baseUrl),
+      password: "register-password-2026",
+      username: "new-visitor",
+    });
+    assert.equal(registerResponse.status, 200);
+    const registered = (await registerResponse.json()) as {
+      user: { id: string; role: string; username: string };
+    };
+    assert.equal(registered.user.username, "new-visitor");
+    assert.equal(registered.user.role, "user");
+    const registeredCookie = getCookie(registerResponse);
+
+    const sessionResponse = await fetch(`${baseUrl}/api/auth/session`, {
+      headers: { Cookie: registeredCookie },
+    });
+    assert.equal(sessionResponse.status, 200);
+    assert.deepEqual(await sessionResponse.json(), {
+      user: {
+        id: registered.user.id,
+        role: "user",
+        username: "new-visitor",
+      },
+    });
+
+    const duplicateRegister = await postJson(baseUrl, "/api/auth/register", {
+      captchaToken: await getCaptchaToken(baseUrl),
+      password: "register-password-2026",
+      username: "NEW-VISITOR",
+    });
+    assert.equal(duplicateRegister.status, 409);
+
+    const loginWithoutCaptcha = await postJson(baseUrl, "/api/auth/login", {
+      password: "register-password-2026",
+      remember: false,
+      username: "new-visitor",
+    });
+    assert.equal(loginWithoutCaptcha.status, 400);
+
+    const changePasswordResponse = await postJson(
+      baseUrl,
+      "/api/auth/password",
+      {
+        currentPassword: "register-password-2026",
+        newPassword: "register-new-password-2026",
+      },
+      registeredCookie,
+    );
+    assert.equal(changePasswordResponse.status, 200);
+
+    const oldPasswordLogin = await postJson(baseUrl, "/api/auth/login", {
+      captchaToken: await getCaptchaToken(baseUrl),
+      password: "register-password-2026",
+      remember: false,
+      username: "new-visitor",
+    });
+    assert.equal(oldPasswordLogin.status, 401);
+
+    const newPasswordLogin = await postJson(baseUrl, "/api/auth/login", {
+      captchaToken: await getCaptchaToken(baseUrl),
+      password: "register-new-password-2026",
+      remember: false,
+      username: "new-visitor",
+    });
+    assert.equal(newPasswordLogin.status, 200);
   } catch (error) {
     throw new Error(
       [

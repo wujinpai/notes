@@ -110,6 +110,7 @@ function createWorkspace(label: string, timestamp: number): NoteWorkspace {
         folderId: null,
         isStarred: false,
         deletedAt: null,
+        hiddenAt: null,
       },
     ],
     version: 1,
@@ -1444,6 +1445,135 @@ test("超级管理员删除普通用户后账号、会话与云端工作区一�
     assert.match(
       ((await deleteMissing.json()) as { error: string }).error,
       /不存在/,
+    );
+  } catch (error) {
+    throw new Error(
+      [
+        error instanceof Error ? error.message : String(error),
+        stdout ? `stdout:\n${stdout}` : "",
+        stderr ? `stderr:\n${stderr}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n"),
+    );
+  }
+});
+
+test("云工作区保存保留 hiddenAt 且老格式自动补齐为 null", async (context) => {
+  const port = await getUnusedPort();
+  const dataDir = await mkdtemp(path.join(tmpdir(), "notes-hidden-data-"));
+  const imageDir = await mkdtemp(path.join(tmpdir(), "notes-hidden-images-"));
+  const baseUrl = `http://127.0.0.1:${port}`;
+  const child = spawn(
+    process.execPath,
+    ["--import", "tsx", "server/index.ts"],
+    {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        DATA_STORAGE_DIR: dataDir,
+        IMAGE_STORAGE_DIR: imageDir,
+        PORT: String(port),
+        SESSION_SECRET: "feedback-session-secret-with-sufficient-entropy",
+        SUPERADMIN: "feedback-admin",
+        SUPERADMINPASSWORD: "feedback-admin-password",
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  );
+  let stdout = "";
+  let stderr = "";
+  child.stdout?.on("data", (chunk) => {
+    stdout += String(chunk);
+  });
+  child.stderr?.on("data", (chunk) => {
+    stderr += String(chunk);
+  });
+
+  context.after(async () => {
+    await stopChild(child);
+    await rm(dataDir, { force: true, recursive: true });
+    await rm(imageDir, { force: true, recursive: true });
+  });
+
+  try {
+    await waitForHealth(baseUrl, child);
+
+    const adminLogin = await postJson(baseUrl, "/api/superadmin/login", {
+      captchaToken: await getCaptchaToken(baseUrl),
+      password: "feedback-admin-password",
+      remember: true,
+      username: "feedback-admin",
+    });
+    assert.equal(adminLogin.status, 200);
+    const adminCookie = getCookie(adminLogin);
+
+    const createdResponse = await postJson(
+      baseUrl,
+      "/api/superadmin/users",
+      { username: "hidden-sync" },
+      adminCookie,
+    );
+    assert.equal(createdResponse.status, 201);
+    const created = (await createdResponse.json()) as { user: CreatedUser };
+
+    const userLogin = await postJson(baseUrl, "/api/auth/login", {
+      captchaToken: await getCaptchaToken(baseUrl),
+      password: created.user.initialPassword,
+      remember: false,
+      username: "hidden-sync",
+    });
+    assert.equal(userLogin.status, 200);
+    const userCookie = getCookie(userLogin);
+
+    const hiddenWorkspace = createWorkspace("hidden-sync", 900);
+    const [hiddenTarget] = hiddenWorkspace.notes;
+    assert.ok(hiddenTarget);
+    hiddenTarget.hiddenAt = 123_456;
+    const hiddenSave = await fetch(`${baseUrl}/api/workspace`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: userCookie,
+      },
+      body: JSON.stringify({ workspace: hiddenWorkspace }),
+    });
+    assert.equal(hiddenSave.status, 200);
+
+    const hiddenRead = await fetch(`${baseUrl}/api/workspace`, {
+      headers: { Cookie: userCookie },
+    });
+    assert.equal(hiddenRead.status, 200);
+    assert.equal(
+      ((await hiddenRead.json()) as { workspace: NoteWorkspace }).workspace
+        .notes[0]?.hiddenAt,
+      123_456,
+    );
+
+    const legacyWorkspace = JSON.parse(
+      JSON.stringify(createWorkspace("hidden-sync", 950)),
+    ) as { notes: Record<string, unknown>[] };
+    const [legacyNote] = legacyWorkspace.notes;
+    assert.ok(legacyNote);
+    delete legacyNote.hiddenAt;
+    const legacySave = await fetch(`${baseUrl}/api/workspace`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: userCookie,
+      },
+      body: JSON.stringify({ workspace: legacyWorkspace }),
+    });
+    assert.equal(legacySave.status, 200);
+
+    const legacyRead = await fetch(`${baseUrl}/api/workspace`, {
+      headers: { Cookie: userCookie },
+    });
+    assert.equal(legacyRead.status, 200);
+    assert.equal(
+      ((await legacyRead.json()) as { workspace: NoteWorkspace }).workspace
+        .notes[0]?.hiddenAt,
+      null,
     );
   } catch (error) {
     throw new Error(

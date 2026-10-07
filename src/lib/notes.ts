@@ -86,6 +86,8 @@ function isValidNote(value: unknown): value is NoteDocument {
     (note.deletedAt === undefined ||
       note.deletedAt === null ||
       (typeof note.deletedAt === "number" && Number.isFinite(note.deletedAt)))
+    // hiddenAt 不在此拦截：缺失或非法值由 parseNoteWorkspace 归一化为 null，
+    // 避免旧工作区或异常隐藏标记导致整份工作区被判无效。
   );
 }
 
@@ -122,6 +124,7 @@ export function createNoteDocument(
     folderId,
     isStarred,
     deletedAt: null,
+    hiddenAt: null,
   };
 }
 
@@ -144,6 +147,10 @@ export function isNoteDeleted(note: NoteDocument): boolean {
   return note.deletedAt !== null;
 }
 
+export function isNoteHidden(note: NoteDocument): boolean {
+  return note.hiddenAt !== null;
+}
+
 export function getFolderCategoryId(folderId: string): NoteCategoryId {
   return `folder:${folderId}`;
 }
@@ -164,7 +171,13 @@ export function getCategoryNoteDocuments(
     return notes.filter(isNoteDeleted);
   }
 
-  const liveNotes = notes.filter((note) => !isNoteDeleted(note));
+  if (categoryId === "hidden") {
+    return notes.filter((note) => !isNoteDeleted(note) && isNoteHidden(note));
+  }
+
+  const liveNotes = notes.filter(
+    (note) => !isNoteDeleted(note) && !isNoteHidden(note),
+  );
 
   if (categoryId === "all") {
     return liveNotes;
@@ -358,6 +371,27 @@ export function toggleNotePinned(
   );
 }
 
+export function toggleNoteHidden(
+  notes: NoteDocument[],
+  noteId: string,
+  now = Date.now(),
+): NoteDocument[] {
+  const target = notes.find((note) => note.id === noteId);
+
+  if (!target || isNoteDeleted(target)) {
+    return notes;
+  }
+
+  return notes.map((note) =>
+    note.id === noteId
+      ? {
+          ...note,
+          hiddenAt: isNoteHidden(note) ? null : now,
+        }
+      : note,
+  );
+}
+
 export function reorderNormalNoteDocuments(
   notes: NoteDocument[],
   activeNoteId: string,
@@ -469,6 +503,10 @@ export function parseNoteWorkspace(value: string | null): NoteWorkspace | null {
       deletedAt:
         typeof note.deletedAt === "number" && Number.isFinite(note.deletedAt)
           ? note.deletedAt
+          : null,
+      hiddenAt:
+        typeof note.hiddenAt === "number" && Number.isFinite(note.hiddenAt)
+          ? note.hiddenAt
           : null,
     }));
     const activeNoteId =

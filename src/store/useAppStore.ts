@@ -10,6 +10,7 @@ import {
   reorderNormalNoteDocuments,
   resolveWorkspaceActiveNote,
   restoreNoteFromTrash,
+  toggleNoteHidden,
   toggleNotePinned,
   toggleNoteStarred,
 } from "../lib/notes";
@@ -57,6 +58,7 @@ interface AppStoreState {
   setCopyState: (copyState: CopyState) => void;
   togglePinned: (noteId: string) => void;
   toggleStarred: (noteId: string) => void;
+  toggleHidden: (noteId: string) => void;
   requestReplaceMarkdown: (
     nextMarkdown: string,
     title: string,
@@ -286,6 +288,10 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   toggleStarred: (noteId) =>
     set((state) => ({
       notes: toggleNoteStarred(state.notes, noteId),
+    })),
+  toggleHidden: (noteId) =>
+    set((state) => ({
+      notes: toggleNoteHidden(state.notes, noteId),
     })),
   requestReplaceMarkdown: (nextMarkdown, title, description) =>
     set((state) => ({

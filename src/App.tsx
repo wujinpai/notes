@@ -132,6 +132,10 @@ function getCategoryLabel(
     return "加星便签";
   }
 
+  if (categoryId === "hidden") {
+    return "隐藏";
+  }
+
   if (categoryId === "trash") {
     return "回收站";
   }
@@ -311,6 +315,7 @@ export default function App() {
   const setCopyState = useAppStore((state) => state.setCopyState);
   const togglePinned = useAppStore((state) => state.togglePinned);
   const toggleStarred = useAppStore((state) => state.toggleStarred);
+  const toggleHidden = useAppStore((state) => state.toggleHidden);
   const clearPendingAction = useAppStore((state) => state.clearPendingAction);
   const confirmPendingAction = useAppStore((state) => state.confirmPendingAction);
 
@@ -1340,7 +1345,7 @@ export default function App() {
     const folderId = getFolderIdFromCategory(activeCategoryId);
     const shouldStar = activeCategoryId === "starred";
 
-    if (activeCategoryId === "trash") {
+    if (activeCategoryId === "trash" || activeCategoryId === "hidden") {
       setActiveCategoryId("all");
     }
 
@@ -2064,6 +2069,7 @@ export default function App() {
             onRestoreNote={restoreNote}
             onSearchQueryChange={setSearchQuery}
             onSelectNote={handleSelectNote}
+            onToggleHidden={toggleHidden}
             onTogglePinned={togglePinned}
             onToggleStarred={toggleStarred}
             isDesktopCategoryCollapsed={isDesktopCategoryCollapsed}

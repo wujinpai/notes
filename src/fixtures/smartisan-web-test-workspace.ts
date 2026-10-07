@@ -16,6 +16,7 @@ const SMARTISAN_WEB_TEST_NOTES: NoteDocument[] = [
     folderId: null,
     isStarred: false,
     deletedAt: null,
+    hiddenAt: null,
   },
   {
     id: "smartisan-web-02",
@@ -27,6 +28,7 @@ const SMARTISAN_WEB_TEST_NOTES: NoteDocument[] = [
     folderId: null,
     isStarred: false,
     deletedAt: null,
+    hiddenAt: null,
   },
   {
     id: "smartisan-web-03",
@@ -39,6 +41,7 @@ const SMARTISAN_WEB_TEST_NOTES: NoteDocument[] = [
     folderId: null,
     isStarred: false,
     deletedAt: null,
+    hiddenAt: null,
   },
   {
     id: "smartisan-web-04",
@@ -51,6 +54,7 @@ const SMARTISAN_WEB_TEST_NOTES: NoteDocument[] = [
     folderId: null,
     isStarred: false,
     deletedAt: null,
+    hiddenAt: null,
   },
   {
     id: "smartisan-web-05",
@@ -63,6 +67,7 @@ const SMARTISAN_WEB_TEST_NOTES: NoteDocument[] = [
     folderId: null,
     isStarred: false,
     deletedAt: null,
+    hiddenAt: null,
   },
   {
     id: "smartisan-web-06",
@@ -74,6 +79,7 @@ const SMARTISAN_WEB_TEST_NOTES: NoteDocument[] = [
     folderId: null,
     isStarred: false,
     deletedAt: null,
+    hiddenAt: null,
   },
   {
     id: "smartisan-web-07",
@@ -86,6 +92,7 @@ const SMARTISAN_WEB_TEST_NOTES: NoteDocument[] = [
     folderId: null,
     isStarred: false,
     deletedAt: null,
+    hiddenAt: null,
   },
   {
     id: "smartisan-web-08",
@@ -98,6 +105,7 @@ const SMARTISAN_WEB_TEST_NOTES: NoteDocument[] = [
     folderId: null,
     isStarred: false,
     deletedAt: null,
+    hiddenAt: null,
   },
   {
     id: "smartisan-web-09",
@@ -110,6 +118,7 @@ const SMARTISAN_WEB_TEST_NOTES: NoteDocument[] = [
     folderId: null,
     isStarred: false,
     deletedAt: null,
+    hiddenAt: null,
   },
   {
     id: "smartisan-web-10",
@@ -122,6 +131,7 @@ const SMARTISAN_WEB_TEST_NOTES: NoteDocument[] = [
     folderId: null,
     isStarred: false,
     deletedAt: null,
+    hiddenAt: null,
   },
   {
     id: "smartisan-web-11",
@@ -134,6 +144,7 @@ const SMARTISAN_WEB_TEST_NOTES: NoteDocument[] = [
     folderId: null,
     isStarred: false,
     deletedAt: null,
+    hiddenAt: null,
   },
   {
     id: "smartisan-web-12",
@@ -146,6 +157,7 @@ const SMARTISAN_WEB_TEST_NOTES: NoteDocument[] = [
     folderId: null,
     isStarred: false,
     deletedAt: null,
+    hiddenAt: null,
   },
   {
     id: "smartisan-web-13",
@@ -158,6 +170,7 @@ const SMARTISAN_WEB_TEST_NOTES: NoteDocument[] = [
     folderId: null,
     isStarred: false,
     deletedAt: null,
+    hiddenAt: null,
   },
   {
     id: "smartisan-web-14",
@@ -170,6 +183,7 @@ const SMARTISAN_WEB_TEST_NOTES: NoteDocument[] = [
     folderId: null,
     isStarred: false,
     deletedAt: null,
+    hiddenAt: null,
   },
   {
     id: "smartisan-web-15",
@@ -182,6 +196,7 @@ const SMARTISAN_WEB_TEST_NOTES: NoteDocument[] = [
     folderId: null,
     isStarred: false,
     deletedAt: null,
+    hiddenAt: null,
   },
   {
     id: "smartisan-web-16",
@@ -194,6 +209,7 @@ const SMARTISAN_WEB_TEST_NOTES: NoteDocument[] = [
     folderId: null,
     isStarred: false,
     deletedAt: null,
+    hiddenAt: null,
   },
   {
     id: "smartisan-web-17",
@@ -206,6 +222,7 @@ const SMARTISAN_WEB_TEST_NOTES: NoteDocument[] = [
     folderId: null,
     isStarred: false,
     deletedAt: null,
+    hiddenAt: null,
   },
   {
     id: "smartisan-web-18",
@@ -218,6 +235,7 @@ const SMARTISAN_WEB_TEST_NOTES: NoteDocument[] = [
     folderId: null,
     isStarred: false,
     deletedAt: null,
+    hiddenAt: null,
   },
   {
     id: "smartisan-web-19",
@@ -230,6 +248,7 @@ const SMARTISAN_WEB_TEST_NOTES: NoteDocument[] = [
     folderId: null,
     isStarred: false,
     deletedAt: null,
+    hiddenAt: null,
   },
   {
     id: "smartisan-web-20",
@@ -242,6 +261,7 @@ const SMARTISAN_WEB_TEST_NOTES: NoteDocument[] = [
     folderId: null,
     isStarred: false,
     deletedAt: null,
+    hiddenAt: null,
   },
 ];
 

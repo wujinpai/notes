@@ -38,6 +38,7 @@ export interface NoteDocument {
   folderId: string | null;
   isStarred: boolean;
   deletedAt: number | null;
+  hiddenAt: number | null;
 }
 
 export interface NoteFolder {
@@ -53,7 +54,7 @@ export interface NoteWorkspace {
   version: 1;
 }
 
-export type SystemNoteCategoryId = "all" | "starred" | "trash";
+export type SystemNoteCategoryId = "all" | "starred" | "hidden" | "trash";
 export type NoteCategoryId = SystemNoteCategoryId | `folder:${string}`;
 
 interface PendingActionBase {

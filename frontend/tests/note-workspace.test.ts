@@ -16,6 +16,7 @@ import {
   discardEmptyNoteDraft,
   getCategoryNoteDocuments,
   getFolderCategoryId,
+  isNoteHidden,
   getNoteDocumentById,
   getNoteListTitle,
   getNotePreview,
@@ -27,6 +28,7 @@ import {
   reorderNormalNoteDocuments,
   resolveWorkspaceActiveNote,
   restoreNoteFromTrash,
+  toggleNoteHidden,
   toggleNotePinned,
   toggleNoteStarred,
 } from "../../src/lib/notes.js";
@@ -280,6 +282,7 @@ test("旧工作区自动补齐排序、加星、分类与回收站字段", () =>
   assert.equal(workspace.notes[0].folderId, null);
   assert.equal(workspace.notes[0].isStarred, false);
   assert.equal(workspace.notes[0].deletedAt, null);
+  assert.equal(workspace.notes[0].hiddenAt, null);
   assert.deepEqual(workspace.folders, []);
 });
 
@@ -322,6 +325,82 @@ test("分类、加星、文件夹归属与回收站使用同一份便签数据",
       .length,
     0,
   );
+});
+
+test("隐藏状态解析兼容老数据与非法值", () => {
+  const workspace = parseNoteWorkspace(
+    JSON.stringify({
+      version: 1,
+      activeNoteId: "hidden-note",
+      notes: [
+        {
+          id: "hidden-note",
+          markdown: "隐藏便签",
+          createdAt: 1_000,
+          updatedAt: 2_000,
+          hiddenAt: 5_000,
+        },
+        {
+          id: "invalid-hidden-note",
+          markdown: "非法隐藏标记",
+          createdAt: 1_000,
+          updatedAt: 2_000,
+          hiddenAt: "soon",
+        },
+      ],
+    }),
+  );
+
+  assert.ok(workspace);
+  assert.equal(workspace.notes[0].hiddenAt, 5_000);
+  assert.equal(workspace.notes[1].hiddenAt, null);
+  assert.equal(createNoteDocument("新建便签", 3_000).hiddenAt, null);
+});
+
+test("隐藏便签只出现在隐藏分类，显示后恢复原分类", () => {
+  const folder = createNoteFolder("工作", 1_000);
+  const plain = createNoteDocument("普通便签", 2_000, 0);
+  const filed = createNoteDocument("文件夹便签", 3_000, 1, folder.id, true);
+  const notes = [plain, filed];
+
+  const hidden = toggleNoteHidden(notes, filed.id, 10_000);
+  const hiddenNote = hidden.find((note) => note.id === filed.id);
+
+  assert.ok(hiddenNote);
+  assert.equal(isNoteHidden(hiddenNote), true);
+  assert.equal(hiddenNote.hiddenAt, 10_000);
+  assert.deepEqual(
+    getCategoryNoteDocuments(hidden, "all").map((note) => note.markdown),
+    ["普通便签"],
+  );
+  assert.equal(getCategoryNoteDocuments(hidden, "starred").length, 0);
+  assert.equal(
+    getCategoryNoteDocuments(hidden, getFolderCategoryId(folder.id)).length,
+    0,
+  );
+  assert.deepEqual(
+    getCategoryNoteDocuments(hidden, "hidden").map((note) => note.markdown),
+    ["文件夹便签"],
+  );
+
+  const trashed = moveNoteToTrash(hidden, filed.id, 20_000);
+  assert.equal(getCategoryNoteDocuments(trashed, "trash")[0]?.id, filed.id);
+  assert.equal(getCategoryNoteDocuments(trashed, "hidden").length, 0);
+  assert.deepEqual(toggleNoteHidden(trashed, filed.id, 30_000), trashed);
+
+  const shown = toggleNoteHidden(hidden, filed.id, 40_000);
+  const shownNote = shown.find((note) => note.id === filed.id);
+
+  assert.ok(shownNote);
+  assert.equal(isNoteHidden(shownNote), false);
+  assert.equal(shownNote.hiddenAt, null);
+  assert.equal(getCategoryNoteDocuments(shown, "all").length, 2);
+  assert.equal(getCategoryNoteDocuments(shown, "starred").length, 1);
+  assert.equal(
+    getCategoryNoteDocuments(shown, getFolderCategoryId(folder.id)).length,
+    1,
+  );
+  assert.equal(getCategoryNoteDocuments(shown, "hidden").length, 0);
 });
 
 test("置顶最近操作优先、置顶区不可拖拽且取消后恢复普通位置", () => {
@@ -400,6 +479,7 @@ test("便签侧栏呈现搜索、新建、切换入口和移动端横滑删除�
       onRestoreNote: noop,
       onSearchQueryChange: noop,
       onSelectNote: noop,
+      onToggleHidden: noop,
       onTogglePinned: noop,
       onToggleStarred: noop,
       onToggleDesktopCategory: noop,
@@ -423,6 +503,8 @@ test("便签侧栏呈现搜索、新建、切换入口和移动端横滑删除�
   assert.doesNotMatch(html, /class="note-list-delete"/);
   assert.match(html, /aria-label="取消置顶：第二张便签"/);
   assert.match(html, /aria-label="置顶便签：第一张便签"/);
+  assert.match(html, /aria-label="隐藏便签：第一张便签"/);
+  assert.match(html, /aria-label="隐藏便签：第二张便签"/);
   assert.match(html, /aria-label="加星便签：第一张便签"/);
   assert.match(html, /icon_top_checked\.png/);
   assert.match(html, /icon_top_normal\.png/);
@@ -431,6 +513,62 @@ test("便签侧栏呈现搜索、新建、切换入口和移动端横滑删除�
   assert.match(html, /class="note-sidebar-bottom-menu"/);
   assert.match(html, new RegExp(`data-note-id="${secondNote.id}"`));
   assert.match(html, new RegExp(`data-note-id="${firstNote.id}"`));
+});
+
+test("隐藏分类显示按钮变显示，回收站不提供隐藏切换", () => {
+  const hiddenNote = {
+    ...createNoteDocument("# 已隐藏便签\n正文", 1_000),
+    hiddenAt: 2_000,
+  };
+  const deletedNote = {
+    ...createNoteDocument("# 回收站便签\n正文", 3_000),
+    deletedAt: 4_000,
+  };
+  const noop = () => undefined;
+  const sidebarProps = {
+    activeNoteId: hiddenNote.id,
+    isDesktopCategoryCollapsed: false,
+    isOpen: true,
+    searchQuery: "",
+    onClose: noop,
+    onCreateNote: noop,
+    onDeleteNote: noop,
+    onPermanentlyDeleteNote: noop,
+    onReorderNotes: noop,
+    onRestoreNote: noop,
+    onSearchQueryChange: noop,
+    onSelectNote: noop,
+    onToggleHidden: noop,
+    onTogglePinned: noop,
+    onToggleStarred: noop,
+    onToggleDesktopCategory: noop,
+  };
+  const hiddenHtml = renderToStaticMarkup(
+    createElement(NoteSidebar, {
+      ...sidebarProps,
+      categoryLabel: "隐藏",
+      isTrashView: false,
+      notes: [hiddenNote],
+    }),
+  );
+
+  assert.match(hiddenHtml, /aria-label="显示便签：已隐藏便签"/);
+  assert.match(hiddenHtml, /aria-pressed="true"/);
+  assert.match(hiddenHtml, /note-list-eye-slash/);
+  assert.doesNotMatch(hiddenHtml, /aria-label="隐藏便签/);
+
+  const trashHtml = renderToStaticMarkup(
+    createElement(NoteSidebar, {
+      ...sidebarProps,
+      activeNoteId: deletedNote.id,
+      categoryLabel: "回收站",
+      isTrashView: true,
+      notes: [deletedNote],
+    }),
+  );
+
+  assert.doesNotMatch(trashHtml, /note-list-hide/);
+  assert.doesNotMatch(trashHtml, /aria-label="显示便签|aria-label="隐藏便签/);
 });
 
 test("便签选择始终按唯一 ID 加载对应正文而非列表位置", () => {
@@ -505,7 +643,7 @@ test("跨端排序更新保留当前设备选中的便签 ID", () => {
   );
 });
 
-test("分类侧栏呈现官方四类入口、数量与自定义文件夹", () => {
+test("分类侧栏呈现系统分类入口、数量与自定义文件夹", () => {
   const folder = createNoteFolder("工作", 1_000);
   const note = createNoteDocument("项目记录", 2_000, 0, folder.id, true);
   const deleted = {
@@ -535,8 +673,10 @@ test("分类侧栏呈现官方四类入口、数量与自定义文件夹", () =>
 
   assert.match(html, /全部便签/);
   assert.match(html, /加星便签/);
+  assert.match(html, /隐藏/);
   assert.match(html, /回收站/);
   assert.match(html, /工作/);
+  assert.match(html, /class="category-row-icon category-row-icon-hidden"/);
   assert.match(html, /aria-label="新建文件夹"/);
   assert.match(html, /placeholder="快速搜索关键字"/);
   assert.match(html, /aria-current="page"/);
@@ -545,7 +685,8 @@ test("分类侧栏呈现官方四类入口、数量与自定义文件夹", () =>
   assert.doesNotMatch(html, /下载锤子便签 APP/);
   assert.ok(html.indexOf("全部便签") < html.indexOf("加星便签"));
   assert.ok(html.indexOf("加星便签") < html.indexOf("工作"));
-  assert.ok(html.indexOf("工作") < html.indexOf("回收站"));
+  assert.ok(html.indexOf("工作") < html.indexOf("隐藏"));
+  assert.ok(html.indexOf("隐藏") < html.indexOf("回收站"));
 });
 
 test("便签侧栏保持锤子网页版的紧凑视觉参数", () => {

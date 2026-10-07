@@ -12,6 +12,17 @@ export interface PublicNoteDetail extends PublicNoteSummary {
   markdown: string;
 }
 
+export function excludeOwnPublicNotes(
+  publicNotes: PublicNoteSummary[],
+  ownNoteIds: ReadonlySet<string>,
+): PublicNoteSummary[] {
+  if (ownNoteIds.size === 0) {
+    return publicNotes;
+  }
+
+  return publicNotes.filter((note) => !ownNoteIds.has(note.id));
+}
+
 export function buildPublicNoteShareUrl(
   origin: string,
   noteId: string,

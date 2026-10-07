@@ -37,6 +37,7 @@ import {
 } from "./lib/app-state";
 import { getAiStatus } from "./lib/ai";
 import {
+  excludeOwnPublicNotes,
   fetchPublicNote,
   fetchPublicNotes,
   type PublicNoteDetail,
@@ -338,6 +339,11 @@ export default function App() {
     () => getCategoryNoteDocuments(noteDocuments, activeCategoryId),
     [activeCategoryId, noteDocuments],
   );
+  const visibleGuestPublicNotes = useMemo(() => {
+    const ownNoteIds = new Set(noteDocuments.map((note) => note.id));
+
+    return excludeOwnPublicNotes(guestPublicNotes, ownNoteIds);
+  }, [guestPublicNotes, noteDocuments]);
   const categoryLabel = getCategoryLabel(activeCategoryId, folders);
   const activeCategoryNote = categoryNoteDocuments.find(
     (note) => note.id === activeNoteId,
@@ -2160,7 +2166,7 @@ export default function App() {
             onSearchQueryChange={setSearchQuery}
             onSelectNote={handleSelectNote}
             onTogglePublic={togglePublic}
-            publicNotes={guestPublicNotes}
+            publicNotes={visibleGuestPublicNotes}
             activePublicNoteId={guestPublicNoteId}
             onSelectPublicNote={handleSelectPublicNote}
             onTogglePinned={togglePinned}

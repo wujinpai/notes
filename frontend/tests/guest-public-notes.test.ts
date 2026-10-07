@@ -7,6 +7,7 @@ import { PublicNoteReader } from "../../src/components/PublicNoteReader.js";
 import { PublicSharePanel } from "../../src/components/PublicSharePanel.js";
 import {
   buildPublicNoteShareUrl,
+  excludeOwnPublicNotes,
   getPublicNoteIdFromSearch,
   type PublicNoteDetail,
   type PublicNoteSummary,
@@ -135,6 +136,23 @@ test("公开便签阅读器对未公开与加载中给出明确状态", () => {
     }),
   );
   assert.match(loadingHtml, /正在加载这篇便签/);
+});
+
+test("登录时混排公开便签过滤掉本人已在列表中的便签", () => {
+  const othersSummary: PublicNoteSummary = {
+    ...publicSummary,
+    id: "pub-2",
+    title: "别人的公开便签",
+  };
+
+  assert.deepEqual(
+    excludeOwnPublicNotes([publicSummary, othersSummary], new Set(["pub-1"])),
+    [othersSummary],
+  );
+  assert.deepEqual(
+    excludeOwnPublicNotes([publicSummary, othersSummary], new Set()),
+    [publicSummary, othersSummary],
+  );
 });
 
 test("公开便签分享链接与直达参数互相匹配", () => {

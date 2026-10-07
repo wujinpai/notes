@@ -292,7 +292,8 @@
 - PC 版便签操作栏右侧按钮调整为“AI、删除、分享”的顺序，与 APP 版详情操作保持一致。
 - 重置 Hermes 安装链接前会明确提示旧链接立即失效，并要求二次确认，避免误触轮换。
 
-[未发布]: https://github.com/zhaoolee/notes/compare/1.10.7...HEAD
+[未发布]: https://github.com/wujinpai/notes/compare/1.10.8...HEAD
+[1.10.8]: https://github.com/wujinpai/notes/compare/1.10.7...1.10.8
 [1.10.7]: https://github.com/zhaoolee/notes/compare/1.10.6...1.10.7
 [1.10.6]: https://github.com/zhaoolee/notes/compare/1.10.5...1.10.6
 [1.10.5]: https://github.com/zhaoolee/notes/compare/1.10.4...1.10.5

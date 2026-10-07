@@ -1,4 +1,4 @@
-# 开源版锤子便签
+# 锤子便签
 
 
 ![](./README.assets/aab7c89dace491a0c90f98d04f53ab503e755968249ea9a89521f56b69eedeac.png)

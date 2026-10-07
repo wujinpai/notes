@@ -479,7 +479,7 @@ printf '%s' "$url" > "$FAKE_CURL_LOG"
     assert.equal(wechat.imageCount, 0);
     const wechatHtml = await readFile(htmlPath, "utf8");
     assert.match(wechatHtml, /Skill 修改便签/);
-    assert.match(wechatHtml, /Powered by zhaoolee\/notes/);
+    assert.match(wechatHtml, /Powered by notes\.jisu\.cn/);
 
     await assert.rejects(
       runSkill(baseUrl, [

@@ -40,9 +40,9 @@ test("PreviewPanel 把独立配色限定在便签卡片并提供浮动入口", (
     createElement(PreviewPanel, {
       notes: [{ heading: "深夜记录", content: "只改变这张便签。" }],
       exportError: "",
-      footerBrand: "由开源版锤子便签发送",
+      footerBrand: "由锤子便签发送",
       footerLogoUrl: "/smartisan/web/smartisan_hammer_footer.png",
-      footerVia: "Powered by zhaoolee/notes",
+      footerVia: "Powered by notes.jisu.cn",
       noteCardTheme: "smartisan-dark",
       onFooterBrandChange: noop,
       onFooterViaChange: noop,

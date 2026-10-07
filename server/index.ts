@@ -4039,7 +4039,7 @@ async function createWechatTitleCover(
       <rect width="900" height="14" fill="${escapeSvgText(themeStyle.colors.accent)}"/>
       <rect x="34" y="34" width="832" height="315" rx="18" fill="none" stroke="${escapeSvgText(themeStyle.colors.border)}" stroke-width="2"/>
       ${titleMarkup}
-      <text x="450" y="326" text-anchor="middle" fill="${escapeSvgText(themeStyle.colors.footer)}" font-family="Noto Sans CJK SC,Noto Sans SC,PingFang SC,sans-serif" font-size="26">开源版锤子便签</text>
+      <text x="450" y="326" text-anchor="middle" fill="${escapeSvgText(themeStyle.colors.footer)}" font-family="Noto Sans CJK SC,Noto Sans SC,PingFang SC,sans-serif" font-size="26">锤子便签</text>
     </svg>`,
   );
   let buffer: Buffer;

@@ -565,7 +565,7 @@ test("Express 提供健康检查和内容寻址图片存储", async (context) =>
       ),
     ) as { deleteAfterDays?: number };
     assert.equal(uploadPolicy.deleteAfterDays, 1);
-    assert.match(wechat.html, /data-tool="开源版锤子便签"/);
+    assert.match(wechat.html, /data-tool="锤子便签"/);
     assert.match(wechat.html, /data-note-card-theme="default"/);
     assert.match(wechat.html, /data-smartisan-theme="default"/);
     assert.match(

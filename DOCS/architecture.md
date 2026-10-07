@@ -38,7 +38,7 @@ MEMORY/                  经测试确认的长期事实
 
 `src/App.tsx` 是页面编排入口。便签集合、当前便签、主题、导出状态和确认操作由 `src/store/useAppStore.ts` 管理。
 
-页面入口会根据访问 Host 设置浏览器标题：域名（包括生产域名）使用“开源版锤子便签”，IPv4 或 IPv6 地址访问时使用“本地化开源版锤子便签”。所有前端路由共用这条规则，子页面不能再次覆盖标题。
+页面入口会根据访问 Host 设置浏览器标题：域名（包括生产域名）使用“锤子便签”，IPv4 或 IPv6 地址访问时使用“本地化锤子便签”。所有前端路由共用这条规则，子页面不能再次覆盖标题。
 
 主题设置区分持久化的“偏好”和实际渲染的“主题”：偏好可为 `system`、`default`
 或 `smartisan-dark`，其中 `system` 通过 `prefers-color-scheme` 解析为后两者之一并
@@ -324,8 +324,8 @@ Data URL。
 从 `IMAGE_STORAGE_DIR` 读取；不能再通过公网 `fetch` 回环访问自身。只有真正的
 外站图片才走远程下载。
 
-底部署名由全局设置中的两段文本控制，默认值为“由开源版锤子便签发送”和
-“Powered by zhaoolee/notes”。浏览器分别使用 `notes.footerBrand` 与
+底部署名由全局设置中的两段文本控制，默认值为“由锤子便签发送”和
+“Powered by notes.jisu.cn”。浏览器分别使用 `notes.footerBrand` 与
 `notes.footerVia` 持久化，每段最多 `80` 个字符；URL 中同名查询参数的优先级
 高于本地设置。Logo 使用 `notes.footerLogoUrl` 保存站内 `/images/*` 相对路径，
 `footerLogoUrl` 查询参数可以覆盖。`NoteSheet` 预览、PNG 导出、离线归档和

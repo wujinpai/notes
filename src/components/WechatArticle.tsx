@@ -888,7 +888,7 @@ export function WechatArticle({
 
   return (
     <section
-      data-tool="开源版锤子便签"
+      data-tool="锤子便签"
       data-note-card-theme={theme}
       data-smartisan-theme={theme}
       style={{

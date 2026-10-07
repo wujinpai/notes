@@ -483,7 +483,7 @@ test("WechatArticle 生成公众号可粘贴的内联样式富文本", () => {
     }),
   );
 
-  assert.match(html, /data-tool="开源版锤子便签"/);
+  assert.match(html, /data-tool="锤子便签"/);
   assert.match(html, /data-note-card-theme="default"/);
   assert.match(html, /data-smartisan-theme="default"/);
   assert.match(

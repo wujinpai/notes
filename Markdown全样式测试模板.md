@@ -1,6 +1,6 @@
 [# **Markdown 全样式测试模板**]
 
-> 这份模板用于一次性检查开源版锤子便签当前支持的常用 Markdown、GFM 扩展和项目自定义排版。可整份复制到编辑器，也可以按 `##` 分节单独测试。
+> 这份模板用于一次性检查锤子便签当前支持的常用 Markdown、GFM 扩展和项目自定义排版。可整份复制到编辑器，也可以按 `##` 分节单独测试。
 
 测试信息：中文 / English / 123456 / 「标点」 / 😀 🚀 ✅
 
@@ -42,7 +42,7 @@ Emoji 与符号：😀 🚀 ✅ 🔥 🎉 · © ® ™ ± × ÷ ≠ ≤ ≥ → 
 
 [普通命名链接](https://github.com/zhaoolee/notes)
 
-[带标题的链接](https://github.com/zhaoolee/notes "开源版锤子便签")
+[带标题的链接](https://github.com/zhaoolee/notes "锤子便签")
 
 自动链接：<https://github.com/zhaoolee/notes>
 
@@ -288,6 +288,6 @@ E = mc²
 
 ## 17 长内容与结束标记
 
-这是一段用于观察长行自动折行的内容：开源版锤子便签会根据预览卡片宽度自动调整正文排版，因此这里刻意放入较长的中文句子、English words、数字 20260805 和 https://github.com/zhaoolee/notes，检查内容不会越过卡片边界。
+这是一段用于观察长行自动折行的内容：锤子便签会根据预览卡片宽度自动调整正文排版，因此这里刻意放入较长的中文句子、English words、数字 20260805 和 https://github.com/zhaoolee/notes，检查内容不会越过卡片边界。
 
 测试结束标记：`MARKDOWN_FULL_STYLE_TEMPLATE_END`

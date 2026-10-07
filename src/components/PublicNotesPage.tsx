@@ -10,6 +10,7 @@ import {
 import { getInitialTheme } from "../lib/themes.js";
 import { useResolvedTheme } from "../lib/use-theme.js";
 import { PublicNoteReader } from "./PublicNoteReader.js";
+import { PublicSharePanel } from "./PublicSharePanel.js";
 
 export function PublicNotesPage() {
   const themePreference = getInitialTheme();
@@ -23,6 +24,7 @@ export function PublicNotesPage() {
       : getPublicNoteIdFromSearch(window.location.search),
   );
   const [error, setError] = useState<string | null>(null);
+  const [isPublicShareOpen, setIsPublicShareOpen] = useState(false);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -131,6 +133,7 @@ export function PublicNotesPage() {
           detail={detail}
           missing={detailMissing}
           onClose={handleBackToList}
+          onShareRequest={() => setIsPublicShareOpen(true)}
         />
       ) : notes === null ? (
         <p className="public-notes-status">正在加载公开便签…</p>
@@ -161,6 +164,13 @@ export function PublicNotesPage() {
           ))}
         </ul>
       )}
+
+      {isPublicShareOpen && detail ? (
+        <PublicSharePanel
+          detail={detail}
+          onClose={() => setIsPublicShareOpen(false)}
+        />
+      ) : null}
     </main>
   );
 }

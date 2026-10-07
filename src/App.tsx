@@ -16,6 +16,7 @@ import { MoveNoteDialog } from "./components/MoveNoteDialog";
 import { NoteSidebar } from "./components/NoteSidebar";
 import { PreviewPanel } from "./components/PreviewPanel";
 import { PublicNoteReader } from "./components/PublicNoteReader";
+import { PublicSharePanel } from "./components/PublicSharePanel";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { SharePanel } from "./components/SharePanel";
 import {
@@ -244,6 +245,8 @@ export default function App() {
   const [guestPublicDetail, setGuestPublicDetail] =
     useState<PublicNoteDetail | null>(null);
   const [guestPublicMissing, setGuestPublicMissing] = useState(false);
+  const [isPublicShareOpen, setIsPublicShareOpen] = useState(false);
+  const isPublicNoteOpen = guestPublicNoteId !== null;
   const [cloudSyncState, setCloudSyncState] = useState<
     "local" | "syncing" | "synced" | "failed"
   >("local");
@@ -1497,6 +1500,7 @@ export default function App() {
   }, [guestPublicNoteId]);
 
   function handleSelectPublicNote(noteId: string) {
+    setIsShareOpen(false);
     setGuestPublicNoteId(noteId);
     setIsNoteSidebarOpen(false);
     setMobileWorkspaceView("preview");
@@ -1625,6 +1629,11 @@ export default function App() {
   }
 
   function handleShareTrigger() {
+    if (guestPublicNoteId) {
+      setIsPublicShareOpen(true);
+      return;
+    }
+
     setIsSettingsOpen(false);
 
     if (window.matchMedia("(min-width: 641px)").matches) {
@@ -1818,6 +1827,7 @@ export default function App() {
         data-category-open={isCategorySidebarOpen ? "true" : "false"}
         data-has-active-note={hasActiveCategoryNote ? "true" : "false"}
         data-mobile-view={mobileWorkspaceView}
+        data-public-note={isPublicNoteOpen ? "open" : undefined}
       >
         <header className="app-topbar">
           <div className="app-topbar-inner">
@@ -2391,6 +2401,13 @@ export default function App() {
           />
         ) : null}
       </div>
+
+      {isPublicShareOpen && guestPublicDetail ? (
+        <PublicSharePanel
+          detail={guestPublicDetail}
+          onClose={() => setIsPublicShareOpen(false)}
+        />
+      ) : null}
 
       {isLoginOpen ? (
         <LoginDialog

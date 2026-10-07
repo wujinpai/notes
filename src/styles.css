@@ -10919,3 +10919,15 @@ body.promo-studio-active {
     display: none;
   }
 }
+
+/* 游客预览公开便签时，隐藏属于本地便签的编辑/删除/存图等入口（分享纸飞机保留，改走公开分享） */
+.app-layout[data-public-note="open"] .preview-export,
+.app-layout[data-public-note="open"] .mobile-insert-image,
+.app-layout[data-public-note="open"] .desktop-move-note,
+.app-layout[data-public-note="open"] .mobile-edit-done,
+.app-layout[data-public-note="open"] .mobile-delete-note,
+.app-layout[data-public-note="open"] .ai-review-trigger,
+.app-layout[data-public-note="open"] .mobile-workspace-tabs,
+.app-layout[data-public-note="open"] .desktop-workspace-toolbar {
+  display: none !important;
+}

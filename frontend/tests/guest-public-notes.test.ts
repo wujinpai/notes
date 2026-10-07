@@ -4,6 +4,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { NoteSidebar } from "../../src/components/NoteSidebar.js";
 import { PublicNoteReader } from "../../src/components/PublicNoteReader.js";
+import { PublicSharePanel } from "../../src/components/PublicSharePanel.js";
 import {
   buildPublicNoteShareUrl,
   getPublicNoteIdFromSearch,
@@ -76,6 +77,7 @@ test("公开便签阅读器以主题卡片渲染正文并提供主题与分享�
       detail,
       missing: false,
       onClose: noop,
+      onShareRequest: noop,
     }),
   );
 
@@ -85,6 +87,34 @@ test("公开便签阅读器以主题卡片渲染正文并提供主题与分享�
   assert.match(html, /返回便签列表/);
   assert.match(html, /分享/);
   assert.match(html, /切换预览主题/);
+
+  const withoutShareHtml = renderToStaticMarkup(
+    createElement(PublicNoteReader, {
+      detail,
+      missing: false,
+      onClose: noop,
+    }),
+  );
+  assert.doesNotMatch(withoutShareHtml, /public-note-reader-share/);
+});
+
+test("公开便签分享面板提供复制与导出动作", () => {
+  const detail: PublicNoteDetail = {
+    ...publicSummary,
+    markdown: "# 游客能看的便签\n\n这是游客正文内容。",
+  };
+  const html = renderToStaticMarkup(
+    createElement(PublicSharePanel, {
+      detail,
+      onClose: noop,
+    }),
+  );
+
+  assert.match(html, /分享这篇便签/);
+  assert.match(html, /复制链接/);
+  assert.match(html, /复制 Markdown/);
+  assert.match(html, /以图片形式分享/);
+  assert.match(html, /导出离线归档/);
 });
 
 test("公开便签阅读器对未公开与加载中给出明确状态", () => {

@@ -12,6 +12,19 @@ export interface PublicNoteDetail extends PublicNoteSummary {
   markdown: string;
 }
 
+export function buildPublicNoteShareUrl(
+  origin: string,
+  noteId: string,
+): string {
+  return `${origin}/public?note=${encodeURIComponent(noteId)}`;
+}
+
+export function getPublicNoteIdFromSearch(search: string): string | null {
+  const noteId = new URLSearchParams(search).get("note");
+
+  return noteId ? noteId : null;
+}
+
 export function formatPublicNoteTime(timestamp: number): string {
   return new Intl.DateTimeFormat("zh-CN", {
     year: "numeric",

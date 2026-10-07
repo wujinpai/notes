@@ -4,9 +4,11 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { NoteSidebar } from "../../src/components/NoteSidebar.js";
 import { PublicNoteReader } from "../../src/components/PublicNoteReader.js";
-import type {
-  PublicNoteDetail,
-  PublicNoteSummary,
+import {
+  buildPublicNoteShareUrl,
+  getPublicNoteIdFromSearch,
+  type PublicNoteDetail,
+  type PublicNoteSummary,
 } from "../../src/lib/public-notes.js";
 
 const noop = () => undefined;
@@ -64,7 +66,7 @@ test("首页便签列表没有公开便签时不渲染公开卡片", () => {
   assert.doesNotMatch(html, /note-list-item-public/);
 });
 
-test("公开便签阅读器渲染正文与只读标记", () => {
+test("公开便签阅读器以主题卡片渲染正文并提供主题与分享入口", () => {
   const detail: PublicNoteDetail = {
     ...publicSummary,
     markdown: "# 游客能看的便签\n\n这是游客正文内容。",
@@ -77,9 +79,12 @@ test("公开便签阅读器渲染正文与只读标记", () => {
     }),
   );
 
+  assert.match(html, /preview-card-theme/);
   assert.match(html, /游客正文内容/);
   assert.match(html, /公开便签 · 只读/);
   assert.match(html, /返回便签列表/);
+  assert.match(html, /分享/);
+  assert.match(html, /切换预览主题/);
 });
 
 test("公开便签阅读器对未公开与加载中给出明确状态", () => {
@@ -100,4 +105,15 @@ test("公开便签阅读器对未公开与加载中给出明确状态", () => {
     }),
   );
   assert.match(loadingHtml, /正在加载这篇便签/);
+});
+
+test("公开便签分享链接与直达参数互相匹配", () => {
+  assert.equal(
+    buildPublicNoteShareUrl("https://notes.jisu.cn", "a/b c"),
+    "https://notes.jisu.cn/public?note=a%2Fb%20c",
+  );
+  assert.equal(getPublicNoteIdFromSearch("?note=abc-123"), "abc-123");
+  assert.equal(getPublicNoteIdFromSearch("?other=1"), null);
+  assert.equal(getPublicNoteIdFromSearch("?note="), null);
+  assert.equal(getPublicNoteIdFromSearch(""), null);
 });

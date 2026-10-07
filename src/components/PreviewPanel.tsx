@@ -39,7 +39,7 @@ interface NoteCardThemePickerProps {
   onChange: (theme: NoteCardThemeId) => void;
 }
 
-function NoteCardThemePicker({ value, onChange }: NoteCardThemePickerProps) {
+export function NoteCardThemePicker({ value, onChange }: NoteCardThemePickerProps) {
   const popoverId = useId();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);

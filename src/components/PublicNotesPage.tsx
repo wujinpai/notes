@@ -3,12 +3,13 @@ import {
   fetchPublicNote,
   fetchPublicNotes,
   formatPublicNoteTime,
+  getPublicNoteIdFromSearch,
   type PublicNoteDetail,
   type PublicNoteSummary,
 } from "../lib/public-notes.js";
 import { getInitialTheme } from "../lib/themes.js";
 import { useResolvedTheme } from "../lib/use-theme.js";
-import { MarkdownText } from "./MarkdownText.js";
+import { PublicNoteReader } from "./PublicNoteReader.js";
 
 export function PublicNotesPage() {
   const themePreference = getInitialTheme();
@@ -16,7 +17,11 @@ export function PublicNotesPage() {
   const [notes, setNotes] = useState<PublicNoteSummary[] | null>(null);
   const [detail, setDetail] = useState<PublicNoteDetail | null>(null);
   const [detailMissing, setDetailMissing] = useState(false);
-  const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
+  const [selectedNoteId, setSelectedNoteId] = useState<string | null>(() =>
+    typeof window === "undefined"
+      ? null
+      : getPublicNoteIdFromSearch(window.location.search),
+  );
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -83,6 +88,26 @@ export function PublicNotesPage() {
     };
   }, [selectedNoteId]);
 
+  function handleSelectNote(noteId: string) {
+    setSelectedNoteId(noteId);
+
+    if (typeof window !== "undefined") {
+      window.history.replaceState(
+        null,
+        "",
+        `/public?note=${encodeURIComponent(noteId)}`,
+      );
+    }
+  }
+
+  function handleBackToList() {
+    setSelectedNoteId(null);
+
+    if (typeof window !== "undefined") {
+      window.history.replaceState(null, "", "/public");
+    }
+  }
+
   return (
     <main className="public-notes-page">
       <header className="public-notes-header">
@@ -102,35 +127,11 @@ export function PublicNotesPage() {
       ) : null}
 
       {selectedNoteId ? (
-        <article className="public-notes-detail">
-          <button
-            type="button"
-            className="public-notes-back"
-            onClick={() => setSelectedNoteId(null)}
-          >
-            ← 返回公开便签列表
-          </button>
-          {detail ? (
-            <>
-              <header className="public-notes-detail-meta">
-                <span>{detail.author}</span>
-                <span aria-hidden="true">·</span>
-                <time dateTime={new Date(detail.updatedAt).toISOString()}>
-                  {formatPublicNoteTime(detail.updatedAt)}
-                </time>
-              </header>
-              <div className="public-notes-markdown">
-                <MarkdownText>{detail.markdown}</MarkdownText>
-              </div>
-            </>
-          ) : detailMissing ? (
-            <p className="public-notes-status">
-              这篇便签没有对游客显示，或者已经被作者隐藏了。
-            </p>
-          ) : (
-            <p className="public-notes-status">正在加载这篇便签…</p>
-          )}
-        </article>
+        <PublicNoteReader
+          detail={detail}
+          missing={detailMissing}
+          onClose={handleBackToList}
+        />
       ) : notes === null ? (
         <p className="public-notes-status">正在加载公开便签…</p>
       ) : notes.length === 0 ? (
@@ -144,7 +145,7 @@ export function PublicNotesPage() {
               <button
                 type="button"
                 className="public-notes-card"
-                onClick={() => setSelectedNoteId(note.id)}
+                onClick={() => handleSelectNote(note.id)}
               >
                 <strong>{note.title}</strong>
                 <span className="public-notes-card-preview">{note.preview}</span>

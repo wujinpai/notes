@@ -168,6 +168,14 @@ test("superadmin 路由、用户管理和首页云同步入口保持连通", () 
   assert.match(adminSource, /确认重置/);
   assert.match(adminSource, /新临时密码（仅显示一次）/);
   assert.match(adminSource, /resetManagedUserPassword\(user\.id\)/);
+  assert.match(adminSource, /删除用户将同时删除该用户的云端便签数据，且不可恢复/);
+  assert.match(adminSource, /确认删除/);
+  assert.match(adminSource, /deleteManagedUser\(user\.id\)/);
+  assert.match(adminSource, /aria-label=\{`删除用户：\$\{user\.username\}`\}/);
+  assert.match(adminSource, /pendingDeleteUserId === user\.id/);
+  assert.match(authSource, /method: "DELETE"/);
+  assert.match(authSource, /删除用户失败。/);
+  assert.match(styles, /\.superadmin-delete-user\s*\{/);
   assert.match(authSource, /"\/api\/superadmin\/users"/);
   assert.match(authSource, /"\/api\/auth\/password"/);
   assert.match(authSource, /reset-password/);

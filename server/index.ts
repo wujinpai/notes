@@ -4775,6 +4775,31 @@ app.post(
   },
 );
 
+app.delete(
+  "/api/superadmin/users/:userId",
+  async (
+    request: Request<{ userId: string }>,
+    response: Response,
+  ) => {
+    if (!(await requireAuthenticatedUser(request, response, "superadmin"))) {
+      return;
+    }
+
+    try {
+      const user = await notesDataStore.deleteUser(request.params.userId);
+      response.json({
+        user,
+      });
+    } catch (error) {
+      response
+        .status(error instanceof AccountNotFoundError ? 404 : 500)
+        .json({
+          error: error instanceof Error ? error.message : "删除用户失败。",
+        });
+    }
+  },
+);
+
 app.get("/api/workspace", async (request: Request, response: Response) => {
   const user = await requireWorkspaceUser(request, response);
 

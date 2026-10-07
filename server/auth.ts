@@ -830,6 +830,31 @@ export class NotesDataStore {
     });
   }
 
+  async deleteUser(userId: string): Promise<AccountSummary> {
+    return this.runExclusive(async () => {
+      const database = await this.readDatabase();
+      const accountIndex = database.users.findIndex(
+        (candidate) => candidate.id === userId,
+      );
+
+      if (accountIndex < 0) {
+        throw new AccountNotFoundError();
+      }
+
+      const [account] = database.users.splice(accountIndex, 1);
+      delete database.workspaces[userId];
+      delete database.wechatConfigurations[userId];
+      delete database.hermesInstallLinks[userId];
+      await this.writeDatabase(database);
+
+      return {
+        createdAt: account.createdAt,
+        id: account.id,
+        username: account.username,
+      };
+    });
+  }
+
   async getWorkspace(userId: string): Promise<StoredWorkspace | null> {
     const database = await this.readDatabase();
     return database.workspaces[userId] ?? null;

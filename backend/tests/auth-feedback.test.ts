@@ -1260,3 +1260,200 @@ test("访客自助注册需要滑块验证，注册后可改密并用新密码�
     );
   }
 });
+
+test("超级管理员删除普通用户后账号、会话与云端工作区一并失效", async (context) => {
+  const port = await getUnusedPort();
+  const dataDir = await mkdtemp(path.join(tmpdir(), "notes-delete-data-"));
+  const imageDir = await mkdtemp(path.join(tmpdir(), "notes-delete-images-"));
+  const baseUrl = `http://127.0.0.1:${port}`;
+  const child = spawn(
+    process.execPath,
+    ["--import", "tsx", "server/index.ts"],
+    {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        DATA_STORAGE_DIR: dataDir,
+        IMAGE_STORAGE_DIR: imageDir,
+        PORT: String(port),
+        SESSION_SECRET: "feedback-session-secret-with-sufficient-entropy",
+        SUPERADMIN: "feedback-admin",
+        SUPERADMINPASSWORD: "feedback-admin-password",
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  );
+  let stdout = "";
+  let stderr = "";
+  child.stdout?.on("data", (chunk) => {
+    stdout += String(chunk);
+  });
+  child.stderr?.on("data", (chunk) => {
+    stderr += String(chunk);
+  });
+
+  context.after(async () => {
+    await stopChild(child);
+    await rm(dataDir, { force: true, recursive: true });
+    await rm(imageDir, { force: true, recursive: true });
+  });
+
+  try {
+    await waitForHealth(baseUrl, child);
+
+    const adminLogin = await postJson(baseUrl, "/api/superadmin/login", {
+      captchaToken: await getCaptchaToken(baseUrl),
+      password: "feedback-admin-password",
+      remember: true,
+      username: "feedback-admin",
+    });
+    assert.equal(adminLogin.status, 200);
+    const adminCookie = getCookie(adminLogin);
+
+    const createdTargetResponse = await postJson(
+      baseUrl,
+      "/api/superadmin/users",
+      { username: "delete-target" },
+      adminCookie,
+    );
+    assert.equal(createdTargetResponse.status, 201);
+    const createdTarget = (await createdTargetResponse.json()) as {
+      user: CreatedUser;
+    };
+
+    const createdBystanderResponse = await postJson(
+      baseUrl,
+      "/api/superadmin/users",
+      { username: "delete-bystander" },
+      adminCookie,
+    );
+    assert.equal(createdBystanderResponse.status, 201);
+    const createdBystander = (await createdBystanderResponse.json()) as {
+      user: CreatedUser;
+    };
+
+    const targetLogin = await postJson(baseUrl, "/api/auth/login", {
+      captchaToken: await getCaptchaToken(baseUrl),
+      password: createdTarget.user.initialPassword,
+      remember: false,
+      username: "delete-target",
+    });
+    assert.equal(targetLogin.status, 200);
+    const targetCookie = getCookie(targetLogin);
+
+    const targetSave = await fetch(`${baseUrl}/api/workspace`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: targetCookie,
+      },
+      body: JSON.stringify({
+        workspace: createWorkspace("delete-target", 700),
+      }),
+    });
+    assert.equal(targetSave.status, 200);
+
+    const targetWorkspace = await fetch(`${baseUrl}/api/workspace`, {
+      headers: { Cookie: targetCookie },
+    });
+    assert.equal(targetWorkspace.status, 200);
+    assert.equal(
+      ((await targetWorkspace.json()) as { workspace: NoteWorkspace }).workspace
+        .notes[0]?.markdown,
+      "# delete-target",
+    );
+
+    const unauthenticatedDelete = await fetch(
+      `${baseUrl}/api/superadmin/users/${createdTarget.user.id}`,
+      { method: "DELETE" },
+    );
+    assert.equal(unauthenticatedDelete.status, 401);
+
+    const bystanderLogin = await postJson(baseUrl, "/api/auth/login", {
+      captchaToken: await getCaptchaToken(baseUrl),
+      password: createdBystander.user.initialPassword,
+      remember: false,
+      username: "delete-bystander",
+    });
+    assert.equal(bystanderLogin.status, 200);
+    const bystanderCookie = getCookie(bystanderLogin);
+
+    const bystanderDelete = await fetch(
+      `${baseUrl}/api/superadmin/users/${createdTarget.user.id}`,
+      {
+        method: "DELETE",
+        headers: { Cookie: bystanderCookie },
+      },
+    );
+    assert.equal(bystanderDelete.status, 403);
+
+    const deleteResponse = await fetch(
+      `${baseUrl}/api/superadmin/users/${createdTarget.user.id}`,
+      {
+        method: "DELETE",
+        headers: { Cookie: adminCookie },
+      },
+    );
+    assert.equal(deleteResponse.status, 200);
+    assert.deepEqual(await deleteResponse.json(), {
+      user: {
+        createdAt: createdTarget.user.createdAt,
+        id: createdTarget.user.id,
+        username: "delete-target",
+      },
+    });
+
+    const userList = await fetch(`${baseUrl}/api/superadmin/users`, {
+      headers: { Cookie: adminCookie },
+    });
+    assert.equal(userList.status, 200);
+    const listedUsers = ((await userList.json()) as { users: CreatedUser[] })
+      .users;
+    assert.deepEqual(
+      listedUsers.map((user) => user.username),
+      ["delete-bystander"],
+    );
+
+    const staleSession = await fetch(`${baseUrl}/api/auth/session`, {
+      headers: { Cookie: targetCookie },
+    });
+    assert.equal(staleSession.status, 200);
+    assert.deepEqual(await staleSession.json(), { user: null });
+
+    const staleWorkspace = await fetch(`${baseUrl}/api/workspace`, {
+      headers: { Cookie: targetCookie },
+    });
+    assert.equal(staleWorkspace.status, 401);
+
+    const relogin = await postJson(baseUrl, "/api/auth/login", {
+      captchaToken: await getCaptchaToken(baseUrl),
+      password: createdTarget.user.initialPassword,
+      remember: false,
+      username: "delete-target",
+    });
+    assert.equal(relogin.status, 401);
+
+    const deleteMissing = await fetch(
+      `${baseUrl}/api/superadmin/users/${createdTarget.user.id}`,
+      {
+        method: "DELETE",
+        headers: { Cookie: adminCookie },
+      },
+    );
+    assert.equal(deleteMissing.status, 404);
+    assert.match(
+      ((await deleteMissing.json()) as { error: string }).error,
+      /不存在/,
+    );
+  } catch (error) {
+    throw new Error(
+      [
+        error instanceof Error ? error.message : String(error),
+        stdout ? `stdout:\n${stdout}` : "",
+        stderr ? `stderr:\n${stderr}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n"),
+    );
+  }
+});

@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import {
   createManagedUser,
+  deleteManagedUser,
   getAuthSession,
   listManagedUsers,
   loginSuperAdmin,
@@ -32,6 +33,7 @@ export function SuperAdminPage() {
     useState<ResetAccountPassword | null>(null);
   const [error, setError] = useState("");
   const [resetError, setResetError] = useState("");
+  const [deleteError, setDeleteError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
   const [isPasswordCopied, setIsPasswordCopied] = useState(false);
@@ -40,6 +42,12 @@ export function SuperAdminPage() {
     null,
   );
   const [isResettingUserId, setIsResettingUserId] = useState<string | null>(
+    null,
+  );
+  const [pendingDeleteUserId, setPendingDeleteUserId] = useState<string | null>(
+    null,
+  );
+  const [isDeletingUserId, setIsDeletingUserId] = useState<string | null>(
     null,
   );
 
@@ -130,6 +138,7 @@ export function SuperAdminPage() {
 
     if (pendingResetUserId !== user.id) {
       setPendingResetUserId(user.id);
+      setPendingDeleteUserId(null);
       setResetAccount(null);
       setResetError("");
       return;
@@ -149,6 +158,46 @@ export function SuperAdminPage() {
       );
     } finally {
       setIsResettingUserId(null);
+    }
+  }
+
+  async function handleDeleteUser(user: AccountSummary) {
+    if (isDeletingUserId) {
+      return;
+    }
+
+    if (pendingDeleteUserId !== user.id) {
+      setPendingDeleteUserId(user.id);
+      setPendingResetUserId(null);
+      setDeleteError("");
+      return;
+    }
+
+    try {
+      setIsDeletingUserId(user.id);
+      setDeleteError("");
+      const deletedUser = await deleteManagedUser(user.id);
+      setUsers((currentUsers) =>
+        currentUsers.filter((candidate) => candidate.id !== deletedUser.id),
+      );
+      setPendingDeleteUserId(null);
+      if (pendingResetUserId === user.id) {
+        setPendingResetUserId(null);
+      }
+      setResetAccount((currentResetAccount) =>
+        currentResetAccount?.id === user.id ? null : currentResetAccount,
+      );
+      if (isResettingUserId === user.id) {
+        setIsResettingUserId(null);
+      }
+    } catch (deleteUserError) {
+      setDeleteError(
+        deleteUserError instanceof Error
+          ? deleteUserError.message
+          : "删除用户失败。",
+      );
+    } finally {
+      setIsDeletingUserId(null);
     }
   }
 
@@ -248,7 +297,7 @@ export function SuperAdminPage() {
             <div>
               <h2>普通用户</h2>
               <p>
-                每个账号拥有独立的云端便签工作区。管理员无法查看现有密码，只能重置。
+                每个账号拥有独立的云端便签工作区。管理员无法查看现有密码，只能重置。删除用户将同时删除该用户的云端便签数据，且不可恢复。
               </p>
             </div>
             <strong>{users.length}</strong>
@@ -257,6 +306,12 @@ export function SuperAdminPage() {
           {resetError ? (
             <p className="superadmin-error" role="alert">
               {resetError}
+            </p>
+          ) : null}
+
+          {deleteError ? (
+            <p className="superadmin-error" role="alert">
+              {deleteError}
             </p>
           ) : null}
 
@@ -294,7 +349,7 @@ export function SuperAdminPage() {
                     <th>用户名或邮箱</th>
                     <th>创建时间</th>
                     <th>用户 ID</th>
-                    <th>密码操作</th>
+                    <th>操作</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -306,22 +361,40 @@ export function SuperAdminPage() {
                         <code>{user.id}</code>
                       </td>
                       <td>
-                        <button
-                          type="button"
-                          className="superadmin-reset-password"
-                          disabled={
-                            Boolean(isResettingUserId) &&
-                            isResettingUserId !== user.id
-                          }
-                          aria-label={`重置密码：${user.username}`}
-                          onClick={() => void handleResetPassword(user)}
-                        >
-                          {isResettingUserId === user.id
-                            ? "正在重置..."
-                            : pendingResetUserId === user.id
-                              ? "确认重置"
-                              : "重置密码"}
-                        </button>
+                        <div className="superadmin-user-actions">
+                          <button
+                            type="button"
+                            className="superadmin-reset-password"
+                            disabled={
+                              Boolean(isResettingUserId) &&
+                              isResettingUserId !== user.id
+                            }
+                            aria-label={`重置密码：${user.username}`}
+                            onClick={() => void handleResetPassword(user)}
+                          >
+                            {isResettingUserId === user.id
+                              ? "正在重置..."
+                              : pendingResetUserId === user.id
+                                ? "确认重置"
+                                : "重置密码"}
+                          </button>
+                          <button
+                            type="button"
+                            className="superadmin-delete-user"
+                            disabled={
+                              Boolean(isDeletingUserId) &&
+                              isDeletingUserId !== user.id
+                            }
+                            aria-label={`删除用户：${user.username}`}
+                            onClick={() => void handleDeleteUser(user)}
+                          >
+                            {isDeletingUserId === user.id
+                              ? "正在删除..."
+                              : pendingDeleteUserId === user.id
+                                ? "确认删除"
+                                : "删除"}
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}

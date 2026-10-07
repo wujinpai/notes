@@ -8781,6 +8781,32 @@ body,
   opacity: 0.5;
 }
 
+.superadmin-user-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.superadmin-delete-user {
+  min-width: 76px;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid #ddb3aa;
+  border-radius: 5px;
+  background: #fdf6f4;
+  color: #a8433a;
+  font: 12px/28px var(--ui-font);
+}
+
+.superadmin-delete-user:hover:not(:disabled) {
+  border-color: #c98d80;
+  background: #f9ece9;
+}
+
+.superadmin-delete-user:disabled {
+  opacity: 0.5;
+}
+
 .superadmin-reset-credential {
   margin: 0 0 18px;
 }

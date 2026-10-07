@@ -310,3 +310,16 @@ export async function resetManagedUserPassword(
   );
   return result.user;
 }
+
+export async function deleteManagedUser(
+  userId: string,
+): Promise<AccountSummary> {
+  const result = await requestJson<{ user: AccountSummary }>(
+    `/api/superadmin/users/${encodeURIComponent(userId)}`,
+    {
+      method: "DELETE",
+    },
+    "删除用户失败。",
+  );
+  return result.user;
+}

@@ -1449,11 +1449,6 @@ export default function App() {
       return;
     }
 
-    if (authUser) {
-      setGuestPublicNotes([]);
-      return;
-    }
-
     let cancelled = false;
 
     fetchPublicNotes()
@@ -1467,7 +1462,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [authStatus, authUser]);
+  }, [authStatus]);
 
   useEffect(() => {
     if (!guestPublicNoteId) {
@@ -2155,7 +2150,7 @@ export default function App() {
             onSearchQueryChange={setSearchQuery}
             onSelectNote={handleSelectNote}
             onTogglePublic={togglePublic}
-            publicNotes={authUser ? undefined : guestPublicNotes}
+            publicNotes={guestPublicNotes}
             activePublicNoteId={guestPublicNoteId}
             onSelectPublicNote={handleSelectPublicNote}
             onTogglePinned={togglePinned}

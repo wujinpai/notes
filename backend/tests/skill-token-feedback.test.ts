@@ -130,7 +130,7 @@ function createWorkspace(timestamp: number): NoteWorkspace {
         folderId: null,
         isStarred: false,
         deletedAt: null,
-        hiddenAt: null,
+        publicAt: null,
       },
     ],
     version: 1,

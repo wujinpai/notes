@@ -86,8 +86,8 @@ function isValidNote(value: unknown): value is NoteDocument {
     (note.deletedAt === undefined ||
       note.deletedAt === null ||
       (typeof note.deletedAt === "number" && Number.isFinite(note.deletedAt)))
-    // hiddenAt 不在此拦截：缺失或非法值由 parseNoteWorkspace 归一化为 null，
-    // 避免旧工作区或异常隐藏标记导致整份工作区被判无效。
+    // publicAt 不在此拦截：缺失或非法值由 parseNoteWorkspace 归一化为 null，
+    // 避免旧工作区或异常公开标记导致整份工作区被判无效。
   );
 }
 
@@ -124,7 +124,7 @@ export function createNoteDocument(
     folderId,
     isStarred,
     deletedAt: null,
-    hiddenAt: null,
+    publicAt: null,
   };
 }
 
@@ -147,8 +147,8 @@ export function isNoteDeleted(note: NoteDocument): boolean {
   return note.deletedAt !== null;
 }
 
-export function isNoteHidden(note: NoteDocument): boolean {
-  return note.hiddenAt !== null;
+export function isNotePublic(note: NoteDocument): boolean {
+  return note.publicAt !== null;
 }
 
 export function getFolderCategoryId(folderId: string): NoteCategoryId {
@@ -171,13 +171,7 @@ export function getCategoryNoteDocuments(
     return notes.filter(isNoteDeleted);
   }
 
-  if (categoryId === "hidden") {
-    return notes.filter((note) => !isNoteDeleted(note) && isNoteHidden(note));
-  }
-
-  const liveNotes = notes.filter(
-    (note) => !isNoteDeleted(note) && !isNoteHidden(note),
-  );
+  const liveNotes = notes.filter((note) => !isNoteDeleted(note));
 
   if (categoryId === "all") {
     return liveNotes;
@@ -371,7 +365,7 @@ export function toggleNotePinned(
   );
 }
 
-export function toggleNoteHidden(
+export function toggleNotePublic(
   notes: NoteDocument[],
   noteId: string,
   now = Date.now(),
@@ -386,7 +380,7 @@ export function toggleNoteHidden(
     note.id === noteId
       ? {
           ...note,
-          hiddenAt: isNoteHidden(note) ? null : now,
+          publicAt: isNotePublic(note) ? null : now,
         }
       : note,
   );
@@ -485,30 +479,36 @@ export function parseNoteWorkspace(value: string | null): NoteWorkspace | null {
         parsedFolders.findIndex((candidate) => candidate.id === folder.id) === index,
     );
     const validFolderIds = new Set(normalizedFolders.map((folder) => folder.id));
-    const normalizedNotes = parsed.notes.map((note, index) => ({
-      ...note,
-      normalOrder:
-        typeof note.normalOrder === "number" && Number.isFinite(note.normalOrder)
-          ? note.normalOrder
-          : index,
-      pinnedAt:
-        typeof note.pinnedAt === "number" && Number.isFinite(note.pinnedAt)
-          ? note.pinnedAt
-          : null,
-      folderId:
-        typeof note.folderId === "string" && validFolderIds.has(note.folderId)
-          ? note.folderId
-          : null,
-      isStarred: note.isStarred === true,
-      deletedAt:
-        typeof note.deletedAt === "number" && Number.isFinite(note.deletedAt)
-          ? note.deletedAt
-          : null,
-      hiddenAt:
-        typeof note.hiddenAt === "number" && Number.isFinite(note.hiddenAt)
-          ? note.hiddenAt
-          : null,
-    }));
+    const normalizedNotes = parsed.notes.map((note, index) => {
+      // 旧工作区可能带有已下线的 hiddenAt，一律丢弃；publicAt 缺失即仅自己可见。
+      const { hiddenAt: _legacyHiddenAt, ...rest } = note as NoteDocument & {
+        hiddenAt?: unknown;
+      };
+      return {
+        ...rest,
+        normalOrder:
+          typeof note.normalOrder === "number" && Number.isFinite(note.normalOrder)
+            ? note.normalOrder
+            : index,
+        pinnedAt:
+          typeof note.pinnedAt === "number" && Number.isFinite(note.pinnedAt)
+            ? note.pinnedAt
+            : null,
+        folderId:
+          typeof note.folderId === "string" && validFolderIds.has(note.folderId)
+            ? note.folderId
+            : null,
+        isStarred: note.isStarred === true,
+        deletedAt:
+          typeof note.deletedAt === "number" && Number.isFinite(note.deletedAt)
+            ? note.deletedAt
+            : null,
+        publicAt:
+          typeof note.publicAt === "number" && Number.isFinite(note.publicAt)
+            ? note.publicAt
+            : null,
+      };
+    });
     const activeNoteId =
       typeof parsed.activeNoteId === "string" &&
       normalizedNotes.some((note) => note.id === parsed.activeNoteId)

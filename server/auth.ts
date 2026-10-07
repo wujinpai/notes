@@ -9,8 +9,12 @@ import {
 import fs from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
-import { parseNoteWorkspace } from "../src/lib/notes.js";
-import type { NoteWorkspace } from "../src/types/app.js";
+import {
+  isNoteDeleted,
+  isNotePublic,
+  parseNoteWorkspace,
+} from "../src/lib/notes.js";
+import type { NoteDocument, NoteWorkspace } from "../src/types/app.js";
 
 const scryptAsync = promisify(scrypt);
 const sessionCookieName = "notes_session";
@@ -51,6 +55,11 @@ export interface ResetAccountPassword extends AccountSummary {
 export interface StoredWorkspace {
   updatedAt: number;
   workspace: NoteWorkspace;
+}
+
+export interface PublicNoteEntry {
+  authorId: string;
+  note: NoteDocument;
 }
 
 export interface WechatConfiguration {
@@ -858,6 +867,21 @@ export class NotesDataStore {
   async getWorkspace(userId: string): Promise<StoredWorkspace | null> {
     const database = await this.readDatabase();
     return database.workspaces[userId] ?? null;
+  }
+
+  async listPublicNotes(): Promise<PublicNoteEntry[]> {
+    const database = await this.readDatabase();
+    const entries: PublicNoteEntry[] = [];
+
+    for (const [authorId, stored] of Object.entries(database.workspaces)) {
+      for (const note of stored.workspace.notes) {
+        if (isNotePublic(note) && !isNoteDeleted(note)) {
+          entries.push({ authorId, note });
+        }
+      }
+    }
+
+    return entries.sort((left, right) => right.note.updatedAt - left.note.updatedAt);
   }
 
   async getWechatConfiguration(

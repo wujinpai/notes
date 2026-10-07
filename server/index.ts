@@ -28,6 +28,7 @@ import {
   NOTE_CARD_THEME_STYLES,
 } from "../src/lib/note-card-theme-styles.js";
 import {
+  getNotePreview,
   getNoteTitle,
   orderNoteDocuments,
   parseNoteWorkspace,
@@ -4815,6 +4816,71 @@ app.get("/api/workspace", async (request: Request, response: Response) => {
     },
   );
 });
+
+async function getPublicNoteAuthorNames(): Promise<Map<string, string>> {
+  const authors = new Map(
+    (await notesDataStore.listUsers()).map((user) => [user.id, user.username]),
+  );
+  const superadmin = getSuperAdminCredentials();
+
+  if (superadmin) {
+    authors.set("superadmin", superadmin.username);
+  }
+
+  return authors;
+}
+
+app.get("/api/public/notes", async (_request: Request, response: Response) => {
+  const [entries, authors] = await Promise.all([
+    notesDataStore.listPublicNotes(),
+    getPublicNoteAuthorNames(),
+  ]);
+
+  response.setHeader("Cache-Control", "no-store");
+  response.json({
+    notes: entries.map(({ authorId, note }) => ({
+      id: note.id,
+      title: getNoteTitle(note.markdown),
+      preview: getNotePreview(note.markdown),
+      author: authors.get(authorId) ?? "用户",
+      createdAt: note.createdAt,
+      updatedAt: note.updatedAt,
+      publicAt: note.publicAt,
+    })),
+  });
+});
+
+app.get(
+  "/api/public/notes/:noteId",
+  async (request: Request<{ noteId: string }>, response: Response) => {
+    const [entries, authors] = await Promise.all([
+      notesDataStore.listPublicNotes(),
+      getPublicNoteAuthorNames(),
+    ]);
+    const entry = entries.find(
+      (candidate) => candidate.note.id === request.params.noteId,
+    );
+
+    response.setHeader("Cache-Control", "no-store");
+
+    if (!entry) {
+      response.status(404).json({ error: "这篇便签未对游客显示或已隐藏。" });
+      return;
+    }
+
+    response.json({
+      note: {
+        id: entry.note.id,
+        title: getNoteTitle(entry.note.markdown),
+        markdown: entry.note.markdown,
+        author: authors.get(entry.authorId) ?? "用户",
+        createdAt: entry.note.createdAt,
+        updatedAt: entry.note.updatedAt,
+        publicAt: entry.note.publicAt,
+      },
+    });
+  },
+);
 
 app.get("/api/ai/status", (_request: Request, response: Response) => {
   response.setHeader("Cache-Control", "no-store");

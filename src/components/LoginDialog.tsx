@@ -261,6 +261,11 @@ export function LoginDialog({
               ? "注册后便签自动保存到云端，并支持跨设备同步。"
               : "登录后便签自动保存到云端，并支持跨设备同步。"}
         </p>
+        {isAdmin ? null : (
+          <a className="login-dialog-public-link" href="/public">
+            不登录，先看看公开便签 →
+          </a>
+        )}
       </section>
     </div>
   );

@@ -16,7 +16,7 @@ import {
   discardEmptyNoteDraft,
   getCategoryNoteDocuments,
   getFolderCategoryId,
-  isNoteHidden,
+  isNotePublic,
   getNoteDocumentById,
   getNoteListTitle,
   getNotePreview,
@@ -28,8 +28,8 @@ import {
   reorderNormalNoteDocuments,
   resolveWorkspaceActiveNote,
   restoreNoteFromTrash,
-  toggleNoteHidden,
   toggleNotePinned,
+  toggleNotePublic,
   toggleNoteStarred,
 } from "../../src/lib/notes.js";
 import {
@@ -282,7 +282,7 @@ test("旧工作区自动补齐排序、加星、分类与回收站字段", () =>
   assert.equal(workspace.notes[0].folderId, null);
   assert.equal(workspace.notes[0].isStarred, false);
   assert.equal(workspace.notes[0].deletedAt, null);
-  assert.equal(workspace.notes[0].hiddenAt, null);
+  assert.equal(workspace.notes[0].publicAt, null);
   assert.deepEqual(workspace.folders, []);
 });
 
@@ -327,80 +327,77 @@ test("分类、加星、文件夹归属与回收站使用同一份便签数据",
   );
 });
 
-test("隐藏状态解析兼容老数据与非法值", () => {
+test("公开状态解析兼容老数据与非法值", () => {
   const workspace = parseNoteWorkspace(
     JSON.stringify({
       version: 1,
-      activeNoteId: "hidden-note",
+      activeNoteId: "public-note",
       notes: [
         {
-          id: "hidden-note",
-          markdown: "隐藏便签",
+          id: "public-note",
+          markdown: "公开便签",
+          createdAt: 1_000,
+          updatedAt: 2_000,
+          publicAt: 5_000,
+        },
+        {
+          id: "invalid-public-note",
+          markdown: "非法公开标记",
+          createdAt: 1_000,
+          updatedAt: 2_000,
+          publicAt: "soon",
+        },
+        {
+          id: "legacy-note",
+          markdown: "只有旧隐藏标记的便签",
           createdAt: 1_000,
           updatedAt: 2_000,
           hiddenAt: 5_000,
-        },
-        {
-          id: "invalid-hidden-note",
-          markdown: "非法隐藏标记",
-          createdAt: 1_000,
-          updatedAt: 2_000,
-          hiddenAt: "soon",
         },
       ],
     }),
   );
 
   assert.ok(workspace);
-  assert.equal(workspace.notes[0].hiddenAt, 5_000);
-  assert.equal(workspace.notes[1].hiddenAt, null);
-  assert.equal(createNoteDocument("新建便签", 3_000).hiddenAt, null);
+  assert.equal(workspace.notes[0].publicAt, 5_000);
+  assert.equal(workspace.notes[1].publicAt, null);
+  assert.equal(workspace.notes[2].publicAt, null);
+  assert.equal(
+    (workspace.notes[2] as unknown as Record<string, unknown>).hiddenAt,
+    undefined,
+  );
+  assert.equal(createNoteDocument("新建便签", 3_000).publicAt, null);
 });
 
-test("隐藏便签只出现在隐藏分类，显示后恢复原分类", () => {
+test("公开切换只影响游客可见，不改变自己的分类列表", () => {
   const folder = createNoteFolder("工作", 1_000);
   const plain = createNoteDocument("普通便签", 2_000, 0);
   const filed = createNoteDocument("文件夹便签", 3_000, 1, folder.id, true);
   const notes = [plain, filed];
 
-  const hidden = toggleNoteHidden(notes, filed.id, 10_000);
-  const hiddenNote = hidden.find((note) => note.id === filed.id);
+  const published = toggleNotePublic(notes, filed.id, 10_000);
+  const publicNote = published.find((note) => note.id === filed.id);
 
-  assert.ok(hiddenNote);
-  assert.equal(isNoteHidden(hiddenNote), true);
-  assert.equal(hiddenNote.hiddenAt, 10_000);
-  assert.deepEqual(
-    getCategoryNoteDocuments(hidden, "all").map((note) => note.markdown),
-    ["普通便签"],
-  );
-  assert.equal(getCategoryNoteDocuments(hidden, "starred").length, 0);
+  assert.ok(publicNote);
+  assert.equal(isNotePublic(publicNote), true);
+  assert.equal(publicNote.publicAt, 10_000);
+  assert.equal(getCategoryNoteDocuments(published, "all").length, 2);
+  assert.equal(getCategoryNoteDocuments(published, "starred").length, 1);
   assert.equal(
-    getCategoryNoteDocuments(hidden, getFolderCategoryId(folder.id)).length,
-    0,
-  );
-  assert.deepEqual(
-    getCategoryNoteDocuments(hidden, "hidden").map((note) => note.markdown),
-    ["文件夹便签"],
-  );
-
-  const trashed = moveNoteToTrash(hidden, filed.id, 20_000);
-  assert.equal(getCategoryNoteDocuments(trashed, "trash")[0]?.id, filed.id);
-  assert.equal(getCategoryNoteDocuments(trashed, "hidden").length, 0);
-  assert.deepEqual(toggleNoteHidden(trashed, filed.id, 30_000), trashed);
-
-  const shown = toggleNoteHidden(hidden, filed.id, 40_000);
-  const shownNote = shown.find((note) => note.id === filed.id);
-
-  assert.ok(shownNote);
-  assert.equal(isNoteHidden(shownNote), false);
-  assert.equal(shownNote.hiddenAt, null);
-  assert.equal(getCategoryNoteDocuments(shown, "all").length, 2);
-  assert.equal(getCategoryNoteDocuments(shown, "starred").length, 1);
-  assert.equal(
-    getCategoryNoteDocuments(shown, getFolderCategoryId(folder.id)).length,
+    getCategoryNoteDocuments(published, getFolderCategoryId(folder.id)).length,
     1,
   );
-  assert.equal(getCategoryNoteDocuments(shown, "hidden").length, 0);
+
+  const unpublished = toggleNotePublic(published, filed.id, 20_000);
+  const privateNote = unpublished.find((note) => note.id === filed.id);
+
+  assert.ok(privateNote);
+  assert.equal(isNotePublic(privateNote), false);
+  assert.equal(privateNote.publicAt, null);
+
+  const trashed = moveNoteToTrash(published, filed.id, 30_000);
+  assert.equal(getCategoryNoteDocuments(trashed, "trash")[0]?.id, filed.id);
+  assert.deepEqual(toggleNotePublic(trashed, filed.id, 40_000), trashed);
 });
 
 test("置顶最近操作优先、置顶区不可拖拽且取消后恢复普通位置", () => {
@@ -479,7 +476,7 @@ test("便签侧栏呈现搜索、新建、切换入口和移动端横滑删除�
       onRestoreNote: noop,
       onSearchQueryChange: noop,
       onSelectNote: noop,
-      onToggleHidden: noop,
+      onTogglePublic: noop,
       onTogglePinned: noop,
       onToggleStarred: noop,
       onToggleDesktopCategory: noop,
@@ -503,8 +500,8 @@ test("便签侧栏呈现搜索、新建、切换入口和移动端横滑删除�
   assert.doesNotMatch(html, /class="note-list-delete"/);
   assert.match(html, /aria-label="取消置顶：第二张便签"/);
   assert.match(html, /aria-label="置顶便签：第一张便签"/);
-  assert.match(html, /aria-label="隐藏便签：第一张便签"/);
-  assert.match(html, /aria-label="隐藏便签：第二张便签"/);
+  assert.match(html, /aria-label="对游客显示便签：第一张便签"/);
+  assert.match(html, /aria-label="对游客显示便签：第二张便签"/);
   assert.match(html, /aria-label="加星便签：第一张便签"/);
   assert.match(html, /icon_top_checked\.png/);
   assert.match(html, /icon_top_normal\.png/);
@@ -515,10 +512,10 @@ test("便签侧栏呈现搜索、新建、切换入口和移动端横滑删除�
   assert.match(html, new RegExp(`data-note-id="${firstNote.id}"`));
 });
 
-test("隐藏分类显示按钮变显示，回收站不提供隐藏切换", () => {
-  const hiddenNote = {
-    ...createNoteDocument("# 已隐藏便签\n正文", 1_000),
-    hiddenAt: 2_000,
+test("游客可见按钮区分公开与未公开，回收站不提供公开切换", () => {
+  const publicNote = {
+    ...createNoteDocument("# 已公开便签\n正文", 1_000),
+    publicAt: 2_000,
   };
   const deletedNote = {
     ...createNoteDocument("# 回收站便签\n正文", 3_000),
@@ -526,7 +523,7 @@ test("隐藏分类显示按钮变显示，回收站不提供隐藏切换", () =>
   };
   const noop = () => undefined;
   const sidebarProps = {
-    activeNoteId: hiddenNote.id,
+    activeNoteId: publicNote.id,
     isDesktopCategoryCollapsed: false,
     isOpen: true,
     searchQuery: "",
@@ -538,24 +535,25 @@ test("隐藏分类显示按钮变显示，回收站不提供隐藏切换", () =>
     onRestoreNote: noop,
     onSearchQueryChange: noop,
     onSelectNote: noop,
-    onToggleHidden: noop,
+    onTogglePublic: noop,
     onTogglePinned: noop,
     onToggleStarred: noop,
     onToggleDesktopCategory: noop,
   };
-  const hiddenHtml = renderToStaticMarkup(
+  const publicHtml = renderToStaticMarkup(
     createElement(NoteSidebar, {
       ...sidebarProps,
-      categoryLabel: "隐藏",
+      categoryLabel: "全部便签",
       isTrashView: false,
-      notes: [hiddenNote],
+      notes: [publicNote],
     }),
   );
 
-  assert.match(hiddenHtml, /aria-label="显示便签：已隐藏便签"/);
-  assert.match(hiddenHtml, /aria-pressed="true"/);
-  assert.match(hiddenHtml, /note-list-eye-slash/);
-  assert.doesNotMatch(hiddenHtml, /aria-label="隐藏便签/);
+  assert.match(publicHtml, /aria-label="取消对游客显示便签：已公开便签"/);
+  assert.match(publicHtml, /aria-pressed="true"/);
+  assert.match(publicHtml, /note-list-public is-public/);
+  assert.doesNotMatch(publicHtml, /note-list-eye-slash/);
+  assert.doesNotMatch(publicHtml, /aria-label="对游客显示便签/);
 
   const trashHtml = renderToStaticMarkup(
     createElement(NoteSidebar, {
@@ -567,8 +565,8 @@ test("隐藏分类显示按钮变显示，回收站不提供隐藏切换", () =>
     }),
   );
 
-  assert.doesNotMatch(trashHtml, /note-list-hide/);
-  assert.doesNotMatch(trashHtml, /aria-label="显示便签|aria-label="隐藏便签/);
+  assert.doesNotMatch(trashHtml, /note-list-public/);
+  assert.doesNotMatch(trashHtml, /对游客显示便签/);
 });
 
 test("便签选择始终按唯一 ID 加载对应正文而非列表位置", () => {
@@ -673,10 +671,9 @@ test("分类侧栏呈现系统分类入口、数量与自定义文件夹", () =>
 
   assert.match(html, /全部便签/);
   assert.match(html, /加星便签/);
-  assert.match(html, /隐藏/);
   assert.match(html, /回收站/);
   assert.match(html, /工作/);
-  assert.match(html, /class="category-row-icon category-row-icon-hidden"/);
+  assert.doesNotMatch(html, /category-row-icon-hidden|>隐藏</);
   assert.match(html, /aria-label="新建文件夹"/);
   assert.match(html, /placeholder="快速搜索关键字"/);
   assert.match(html, /aria-current="page"/);
@@ -685,8 +682,7 @@ test("分类侧栏呈现系统分类入口、数量与自定义文件夹", () =>
   assert.doesNotMatch(html, /下载锤子便签 APP/);
   assert.ok(html.indexOf("全部便签") < html.indexOf("加星便签"));
   assert.ok(html.indexOf("加星便签") < html.indexOf("工作"));
-  assert.ok(html.indexOf("工作") < html.indexOf("隐藏"));
-  assert.ok(html.indexOf("隐藏") < html.indexOf("回收站"));
+  assert.ok(html.indexOf("工作") < html.indexOf("回收站"));
 });
 
 test("便签侧栏保持锤子网页版的紧凑视觉参数", () => {
@@ -1511,4 +1507,55 @@ test("移动端拖拽只移动便签本体且图钉保留安全间距", () => {
     /\.note-list-pin\s*\{[^}]*right:\s*43px;[^}]*width:\s*39px;[^}]*height:\s*47px;/s,
   );
   assert.match(styles, /\.note-list-pin\s*\{[^}]*display:\s*grid;/s);
+});
+
+test("公开便签接口响应只保留游客可见字段并过滤非法条目", async () => {
+  const { parsePublicNoteDetailResponse, parsePublicNotesResponse } =
+    await import("../../src/lib/public-notes.js");
+
+  const summaries = parsePublicNotesResponse({
+    notes: [
+      {
+        id: "note-1",
+        title: "公开便签",
+        preview: "预览",
+        author: "owner",
+        createdAt: 1_000,
+        updatedAt: 2_000,
+        publicAt: 1_500,
+        markdown: "不应出现在列表解析结果里",
+      },
+      { id: "note-2", title: "缺字段" },
+      "invalid",
+    ],
+  });
+
+  assert.equal(summaries.length, 1);
+  assert.deepEqual(summaries[0], {
+    id: "note-1",
+    title: "公开便签",
+    preview: "预览",
+    author: "owner",
+    createdAt: 1_000,
+    updatedAt: 2_000,
+    publicAt: 1_500,
+  });
+  assert.deepEqual(parsePublicNotesResponse(null), []);
+  assert.deepEqual(parsePublicNotesResponse({ notes: "nope" }), []);
+
+  const detail = parsePublicNoteDetailResponse({
+    note: {
+      id: "note-1",
+      title: "公开便签",
+      preview: "预览",
+      author: "owner",
+      createdAt: 1_000,
+      updatedAt: 2_000,
+      publicAt: 1_500,
+      markdown: "# 公开便签\n正文",
+    },
+  });
+  assert.equal(detail?.markdown, "# 公开便签\n正文");
+  assert.equal(parsePublicNoteDetailResponse({ note: { id: "x" } }), null);
+  assert.equal(parsePublicNoteDetailResponse(null), null);
 });

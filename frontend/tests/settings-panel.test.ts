@@ -535,7 +535,12 @@ test("设置入口复用同一个分类浮窗，并按桌面和手机切换导�
   );
   assert.match(
     styles,
-    /\.desktop-sidebar-footer\s*\{[^}]*width:\s*100%;[^}]*height:\s*49px;/s,
+    /\.desktop-sidebar-footer\s*\{[^}]*width:\s*100%;/s,
+  );
+  assert.match(appSource, /className="desktop-public-notes-link" href="\/public"/);
+  assert.match(
+    styles,
+    /\.desktop-public-notes-link\s*\{[^}]*font-size:\s*12px;/s,
   );
   assert.match(
     styles,

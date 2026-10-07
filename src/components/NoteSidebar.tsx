@@ -36,7 +36,7 @@ import {
 import {
   getNoteListTitle,
   getNoteTitle,
-  isNoteHidden,
+  isNotePublic,
   isNotePinned,
   orderNoteDocuments,
 } from "../lib/notes.js";
@@ -58,7 +58,7 @@ interface NoteSidebarProps {
   onRestoreNote: (noteId: string) => void;
   onSearchQueryChange: (query: string) => void;
   onSelectNote: (noteId: string) => void;
-  onToggleHidden: (noteId: string) => void;
+  onTogglePublic: (noteId: string) => void;
   onTogglePinned: (noteId: string) => void;
   onToggleStarred: (noteId: string) => void;
   onToggleDesktopCategory: () => void;
@@ -93,7 +93,7 @@ function hasMarkdownImage(markdown: string): boolean {
 
 function NoteDragOverlay({ note }: { note: NoteDocument }) {
   const includesImage = hasMarkdownImage(note.markdown);
-  const hidden = isNoteHidden(note);
+  const publicNote = isNotePublic(note);
 
   return (
     <div
@@ -109,13 +109,13 @@ function NoteDragOverlay({ note }: { note: NoteDocument }) {
           </span>
           <strong>{getNoteListTitle(note.markdown)}</strong>
         </div>
-        <span className={`note-list-hide${hidden ? " is-hidden" : ""}`}>
+        <span className={`note-list-public${publicNote ? " is-public" : ""}`}>
           <svg viewBox="0 0 24 24">
             <path d="M2.2 12s3.5-6 9.8-6 9.8 6 9.8 6-3.5 6-9.8 6-9.8-6-9.8-6Z" />
             <circle cx="12" cy="12" r="2.8" />
-            {hidden ? (
+            {publicNote ? null : (
               <path className="note-list-eye-slash" d="m4 4 16 16" />
-            ) : null}
+            )}
           </svg>
         </span>
         <span className="note-list-pin">
@@ -148,7 +148,7 @@ interface SortableNoteListItemProps {
   onSelectNote: (noteId: string) => void;
   onSwipeClose: () => void;
   onSwipeOpen: () => void;
-  onToggleHidden: (noteId: string) => void;
+  onTogglePublic: (noteId: string) => void;
   onTogglePinned: (noteId: string) => void;
   onToggleStarred: (noteId: string) => void;
 }
@@ -173,12 +173,12 @@ function SortableNoteListItem({
   onSelectNote,
   onSwipeClose,
   onSwipeOpen,
-  onToggleHidden,
+  onTogglePublic,
   onTogglePinned,
   onToggleStarred,
 }: SortableNoteListItemProps) {
   const pinned = isNotePinned(note);
-  const hidden = isNoteHidden(note);
+  const publicNote = isNotePublic(note);
   const isSortable = !pinned && !isDragDisabled && !isTrashView;
   const includesImage = hasMarkdownImage(note.markdown);
   const isActive = note.id === activeNoteId;
@@ -240,7 +240,7 @@ function SortableNoteListItem({
       typeof window !== "undefined" &&
       window.matchMedia("(max-width: 640px)").matches &&
       !(event.target as HTMLElement).closest(
-        ".note-list-hide, .note-list-pin, .note-list-star",
+        ".note-list-public, .note-list-pin, .note-list-star",
       )
     );
   }
@@ -403,22 +403,22 @@ function SortableNoteListItem({
           <>
             <button
               type="button"
-              className={`note-list-hide${hidden ? " is-hidden" : ""}`}
+              className={`note-list-public${publicNote ? " is-public" : ""}`}
               aria-label={
-                hidden
-                  ? `显示便签：${getNoteTitle(note.markdown)}`
-                  : `隐藏便签：${getNoteTitle(note.markdown)}`
+                publicNote
+                  ? `取消对游客显示便签：${getNoteTitle(note.markdown)}`
+                  : `对游客显示便签：${getNoteTitle(note.markdown)}`
               }
-              aria-pressed={hidden}
-              title={hidden ? "显示便签" : "隐藏便签"}
-              onClick={() => onToggleHidden(note.id)}
+              aria-pressed={publicNote}
+              title={publicNote ? "游客可见 · 点击隐藏" : "仅自己可见 · 点击对游客显示"}
+              onClick={() => onTogglePublic(note.id)}
             >
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M2.2 12s3.5-6 9.8-6 9.8 6 9.8 6-3.5 6-9.8 6-9.8-6-9.8-6Z" />
                 <circle cx="12" cy="12" r="2.8" />
-                {hidden ? (
+                {publicNote ? null : (
                   <path className="note-list-eye-slash" d="m4 4 16 16" />
-                ) : null}
+                )}
               </svg>
             </button>
             <button
@@ -507,7 +507,7 @@ export function NoteSidebar({
   onRestoreNote,
   onSearchQueryChange,
   onSelectNote,
-  onToggleHidden,
+  onTogglePublic,
   onTogglePinned,
   onToggleStarred,
   onToggleDesktopCategory,
@@ -692,7 +692,7 @@ export function NoteSidebar({
                       )
                     }
                     onSwipeOpen={() => setOpenSwipeNoteId(note.id)}
-                    onToggleHidden={onToggleHidden}
+                    onTogglePublic={onTogglePublic}
                     onTogglePinned={onTogglePinned}
                     onToggleStarred={onToggleStarred}
                   />

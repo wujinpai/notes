@@ -132,10 +132,6 @@ function getCategoryLabel(
     return "加星便签";
   }
 
-  if (categoryId === "hidden") {
-    return "隐藏";
-  }
-
   if (categoryId === "trash") {
     return "回收站";
   }
@@ -315,7 +311,7 @@ export default function App() {
   const setCopyState = useAppStore((state) => state.setCopyState);
   const togglePinned = useAppStore((state) => state.togglePinned);
   const toggleStarred = useAppStore((state) => state.toggleStarred);
-  const toggleHidden = useAppStore((state) => state.toggleHidden);
+  const togglePublic = useAppStore((state) => state.togglePublic);
   const clearPendingAction = useAppStore((state) => state.clearPendingAction);
   const confirmPendingAction = useAppStore((state) => state.confirmPendingAction);
 
@@ -1345,7 +1341,7 @@ export default function App() {
     const folderId = getFolderIdFromCategory(activeCategoryId);
     const shouldStar = activeCategoryId === "starred";
 
-    if (activeCategoryId === "trash" || activeCategoryId === "hidden") {
+    if (activeCategoryId === "trash") {
       setActiveCategoryId("all");
     }
 
@@ -1664,6 +1660,9 @@ export default function App() {
   const desktopSidebarFooter = (
     <div className="desktop-sidebar-footer">
       {desktopAccountEntry}
+      <a className="desktop-public-notes-link" href="/public">
+        公开便签 · 游客可见
+      </a>
     </div>
   );
 
@@ -2069,7 +2068,7 @@ export default function App() {
             onRestoreNote={restoreNote}
             onSearchQueryChange={setSearchQuery}
             onSelectNote={handleSelectNote}
-            onToggleHidden={toggleHidden}
+            onTogglePublic={togglePublic}
             onTogglePinned={togglePinned}
             onToggleStarred={toggleStarred}
             isDesktopCategoryCollapsed={isDesktopCategoryCollapsed}

@@ -2,13 +2,11 @@
 
 本文件只记录已从代码或 feedback 测试中确认、预计会影响后续任务的信息。临时调试输出和未经验证的推测不写入这里。
 
-## 2026-10-07：便签隐藏与「隐藏」分类（未发布）
+## 2026-10-07：便签游客公开与 /public 公开页（未发布）
 
-- `NoteDocument` 新增 `hiddenAt: number | null`（与 `pinnedAt`/`deletedAt` 同构，新建便签默认 `null` 显示）。`parseNoteWorkspace` 将缺失或非法的 `hiddenAt` 归一化为 `null`，且 `isValidNote` 不拦截该字段，避免旧工作区或异常隐藏标记导致整份工作区被判无效；服务端与前端共用这份解析，隐藏状态随 `PUT /api/workspace` 整体保存，无新增接口。
-- 系统分类新增「隐藏」（侧栏位于自定义文件夹之后、回收站之前，带计数）：`getCategoryNoteDocuments` 中 `hidden` 返回未删除的已隐藏便签，其余非回收站分类同时排除已删除与已隐藏便签；列表搜索基于分类结果再按关键字过滤，因此搜索同样不出现隐藏便签（在「隐藏」分类内搜索除外）。回收站行为不受隐藏影响，回收站视图不显示隐藏按钮。
-- 隐藏当前正在编辑的便签只做列表过滤，编辑器继续编辑该便签，不切换当前选中、不丢内容（与移入回收站会改选下一张不同，隐藏是轻量组织操作）。
-- 列表卡片在加星按钮旁新增眼睛切换按钮（`aria-pressed` 表示已隐藏）；精灵图里没有眼睛字形，图标复用登录弹窗的内联眼睛 SVG（隐藏态带斜线），分类图标同色调复用同一组 SVG，未引入新图片资源。
-- 验证结果：`npm run typecheck`（app/server/feedback）全部通过，前端 feedback 131 项、后端 feedback 18 项全部通过；另用临时数据目录做真实 HTTP 端到端核验：管理员建号 201 → 用户保存 `hiddenAt=777000` 工作区读回原样 → 老格式（无 `hiddenAt`）保存 200 且读回为 `null`。
+- 需求经用户澄清后由此前「隐藏便签」（提交 5b361aa，自行列表过滤 + 「隐藏」分类）改为「游客可见开关」：`NoteDocument.hiddenAt` 更名为 `publicAt: number | null`（默认 `null` 不对游客显示）。`parseNoteWorkspace` 将缺失或非法的 `publicAt` 归一化为 `null`，并丢弃旧工作区里已下线的 `hiddenAt`；`isValidNote` 仍不拦截该字段，公开状态随 `PUT /api/workspace` 整体保存。「隐藏」系统分类已移除，作者在自己的全部分类与搜索中始终看到全部未删除便签。
+- 新增免登录只读接口：`NotesDataStore.listPublicNotes()` 汇总所有云端工作区中 `publicAt` 非空且未删除的便签，按 `updatedAt` 倒序；`GET /api/public/notes` 返回标题、摘要（`getNotePreview`）、作者用户名与时间（不含正文），`GET /api/public/notes/:noteId` 返回正文，未公开/已删除/他人便签一律 404；超级管理员工作区的作者显示其登录账号名。前端新增 `/public` 公开页（`src/components/PublicNotesPage.tsx` + `src/lib/public-notes.ts` 解析校验），登录弹窗与桌面分类栏底部提供入口。列表卡片眼睛按钮改为切换游客可见（`aria-pressed` 表示已公开，公开态琥珀色高亮），回收站视图不显示该按钮。
+- 验证结果：`npm run typecheck`（app/server/feedback）全部通过，前端 feedback 132 项全部通过（改造原隐藏用例并新增公开接口响应解析用例），后端 feedback 19 项全部通过（新增 `backend/tests/public-notes-feedback.test.ts` 真实 HTTP 用例：两名注册用户 + 超级管理员公开便签、游客只读边界、取消显示立即下线）；`vite build` 构建成功。提交前此功能未部署到生产。
 
 ## 2026-10-07：超级管理员删除普通用户（未发布）
 

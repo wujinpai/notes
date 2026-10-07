@@ -4,6 +4,7 @@ import changelogMarkdown from "../CHANGELOG.md?raw";
 import App from "./App";
 import { ChangelogPage } from "./components/ChangelogPage";
 import { PromoStudioPage } from "./components/PromoStudioPage";
+import { PublicNotesPage } from "./components/PublicNotesPage";
 import { SuperAdminPage } from "./components/SuperAdminPage";
 import { installAutoHideScrollbars } from "./lib/auto-hide-scrollbars";
 import { getPageTitle } from "./lib/page-title";
@@ -18,6 +19,8 @@ const rootPage =
     <SuperAdminPage />
   ) : pathname === "/changelog" ? (
     <ChangelogPage markdown={changelogMarkdown} />
+  ) : pathname === "/public" ? (
+    <PublicNotesPage />
   ) : pathname === "/promo/editor" ? (
     <PromoStudioPage mode="editor" />
   ) : pathname === "/promo/pages" ? (

@@ -110,7 +110,7 @@ function createWorkspace(label: string, timestamp: number): NoteWorkspace {
         folderId: null,
         isStarred: false,
         deletedAt: null,
-        hiddenAt: null,
+        publicAt: null,
       },
     ],
     version: 1,
@@ -1459,10 +1459,10 @@ test("超级管理员删除普通用户后账号、会话与云端工作区一�
   }
 });
 
-test("云工作区保存保留 hiddenAt 且老格式自动补齐为 null", async (context) => {
+test("云工作区保存保留 publicAt 且老格式自动补齐为 null", async (context) => {
   const port = await getUnusedPort();
-  const dataDir = await mkdtemp(path.join(tmpdir(), "notes-hidden-data-"));
-  const imageDir = await mkdtemp(path.join(tmpdir(), "notes-hidden-images-"));
+  const dataDir = await mkdtemp(path.join(tmpdir(), "notes-public-data-"));
+  const imageDir = await mkdtemp(path.join(tmpdir(), "notes-public-images-"));
   const baseUrl = `http://127.0.0.1:${port}`;
   const child = spawn(
     process.execPath,
@@ -1511,7 +1511,7 @@ test("云工作区保存保留 hiddenAt 且老格式自动补齐为 null", async
     const createdResponse = await postJson(
       baseUrl,
       "/api/superadmin/users",
-      { username: "hidden-sync" },
+      { username: "public-sync" },
       adminCookie,
     );
     assert.equal(createdResponse.status, 201);
@@ -1521,41 +1521,41 @@ test("云工作区保存保留 hiddenAt 且老格式自动补齐为 null", async
       captchaToken: await getCaptchaToken(baseUrl),
       password: created.user.initialPassword,
       remember: false,
-      username: "hidden-sync",
+      username: "public-sync",
     });
     assert.equal(userLogin.status, 200);
     const userCookie = getCookie(userLogin);
 
-    const hiddenWorkspace = createWorkspace("hidden-sync", 900);
-    const [hiddenTarget] = hiddenWorkspace.notes;
-    assert.ok(hiddenTarget);
-    hiddenTarget.hiddenAt = 123_456;
-    const hiddenSave = await fetch(`${baseUrl}/api/workspace`, {
+    const publicWorkspace = createWorkspace("public-sync", 900);
+    const [publicTarget] = publicWorkspace.notes;
+    assert.ok(publicTarget);
+    publicTarget.publicAt = 123_456;
+    const publicSave = await fetch(`${baseUrl}/api/workspace`, {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
         Cookie: userCookie,
       },
-      body: JSON.stringify({ workspace: hiddenWorkspace }),
+      body: JSON.stringify({ workspace: publicWorkspace }),
     });
-    assert.equal(hiddenSave.status, 200);
+    assert.equal(publicSave.status, 200);
 
-    const hiddenRead = await fetch(`${baseUrl}/api/workspace`, {
+    const publicRead = await fetch(`${baseUrl}/api/workspace`, {
       headers: { Cookie: userCookie },
     });
-    assert.equal(hiddenRead.status, 200);
+    assert.equal(publicRead.status, 200);
     assert.equal(
-      ((await hiddenRead.json()) as { workspace: NoteWorkspace }).workspace
-        .notes[0]?.hiddenAt,
+      ((await publicRead.json()) as { workspace: NoteWorkspace }).workspace
+        .notes[0]?.publicAt,
       123_456,
     );
 
     const legacyWorkspace = JSON.parse(
-      JSON.stringify(createWorkspace("hidden-sync", 950)),
+      JSON.stringify(createWorkspace("public-sync", 950)),
     ) as { notes: Record<string, unknown>[] };
     const [legacyNote] = legacyWorkspace.notes;
     assert.ok(legacyNote);
-    delete legacyNote.hiddenAt;
+    delete legacyNote.publicAt;
     const legacySave = await fetch(`${baseUrl}/api/workspace`, {
       method: "PUT",
       headers: {
@@ -1572,7 +1572,7 @@ test("云工作区保存保留 hiddenAt 且老格式自动补齐为 null", async
     assert.equal(legacyRead.status, 200);
     assert.equal(
       ((await legacyRead.json()) as { workspace: NoteWorkspace }).workspace
-        .notes[0]?.hiddenAt,
+        .notes[0]?.publicAt,
       null,
     );
   } catch (error) {

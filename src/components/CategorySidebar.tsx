@@ -32,7 +32,7 @@ interface CategorySidebarProps {
 interface CategoryRowProps {
   active: boolean;
   count: number;
-  icon: "all" | "folder" | "hidden" | "starred" | "trash";
+  icon: "all" | "folder" | "starred" | "trash";
   label: string;
   onClick: () => void;
   onDelete?: () => void;
@@ -61,15 +61,7 @@ function CategoryRow({
         <span
           className={`category-row-icon category-row-icon-${icon}`}
           aria-hidden="true"
-        >
-          {icon === "hidden" ? (
-            <svg viewBox="0 0 24 24">
-              <path d="M2.2 12s3.5-6 9.8-6 9.8 6 9.8 6-3.5 6-9.8 6-9.8-6-9.8-6Z" />
-              <circle cx="12" cy="12" r="2.8" />
-              <path className="category-row-eye-slash" d="m4 4 16 16" />
-            </svg>
-          ) : null}
-        </span>
+        />
         <span className="category-row-label">{label}</span>
         <span className="category-row-count" aria-label={`${count} 张便签`}>
           {count}
@@ -113,7 +105,6 @@ export function CategorySidebar({
     () => ({
       all: getCategoryNoteDocuments(notes, "all").length,
       starred: getCategoryNoteDocuments(notes, "starred").length,
-      hidden: getCategoryNoteDocuments(notes, "hidden").length,
       trash: getCategoryNoteDocuments(notes, "trash").length,
     }),
     [notes],
@@ -245,13 +236,6 @@ export function CategorySidebar({
             />
           );
         })}
-        <CategoryRow
-          active={activeCategoryId === "hidden"}
-          count={categoryCounts.hidden}
-          icon="hidden"
-          label="隐藏"
-          onClick={() => onCategorySelect("hidden")}
-        />
         <CategoryRow
           active={activeCategoryId === "trash"}
           count={categoryCounts.trash}

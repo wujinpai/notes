@@ -2,23 +2,13 @@ import { useEffect, useState } from "react";
 import {
   fetchPublicNote,
   fetchPublicNotes,
+  formatPublicNoteTime,
   type PublicNoteDetail,
   type PublicNoteSummary,
 } from "../lib/public-notes.js";
 import { getInitialTheme } from "../lib/themes.js";
 import { useResolvedTheme } from "../lib/use-theme.js";
 import { MarkdownText } from "./MarkdownText.js";
-
-function formatPublicNoteTime(timestamp: number): string {
-  return new Intl.DateTimeFormat("zh-CN", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).format(new Date(timestamp));
-}
 
 export function PublicNotesPage() {
   const themePreference = getInitialTheme();

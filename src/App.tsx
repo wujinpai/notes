@@ -15,6 +15,7 @@ import { LoginDialog } from "./components/LoginDialog";
 import { MoveNoteDialog } from "./components/MoveNoteDialog";
 import { NoteSidebar } from "./components/NoteSidebar";
 import { PreviewPanel } from "./components/PreviewPanel";
+import { PublicNoteReader } from "./components/PublicNoteReader";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { SharePanel } from "./components/SharePanel";
 import {
@@ -34,6 +35,12 @@ import {
   THEME_STORAGE_KEY,
 } from "./lib/app-state";
 import { getAiStatus } from "./lib/ai";
+import {
+  fetchPublicNote,
+  fetchPublicNotes,
+  type PublicNoteDetail,
+  type PublicNoteSummary,
+} from "./lib/public-notes";
 import {
   canUseCloudWorkspace,
   changeUserPassword,
@@ -228,6 +235,15 @@ export default function App() {
   const [isDesktopSharePreview, setIsDesktopSharePreview] = useState(false);
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [authStatus, setAuthStatus] = useState<"loading" | "ready">("loading");
+  const [guestPublicNotes, setGuestPublicNotes] = useState<PublicNoteSummary[]>(
+    [],
+  );
+  const [guestPublicNoteId, setGuestPublicNoteId] = useState<string | null>(
+    null,
+  );
+  const [guestPublicDetail, setGuestPublicDetail] =
+    useState<PublicNoteDetail | null>(null);
+  const [guestPublicMissing, setGuestPublicMissing] = useState(false);
   const [cloudSyncState, setCloudSyncState] = useState<
     "local" | "syncing" | "synced" | "failed"
   >("local");
@@ -1360,6 +1376,7 @@ export default function App() {
   function handleReturnToNoteList() {
     setIsSettingsOpen(false);
     setIsShareOpen(false);
+    setGuestPublicNoteId(null);
 
     const draftNoteId = mobileDraftNoteIdRef.current;
     mobileDraftNoteIdRef.current = null;
@@ -1427,6 +1444,74 @@ export default function App() {
     }, NOTE_REFRESH_DELAY_MS);
   }
 
+  useEffect(() => {
+    if (authStatus !== "ready") {
+      return;
+    }
+
+    if (authUser) {
+      setGuestPublicNotes([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    fetchPublicNotes()
+      .then((publicNotes) => {
+        if (!cancelled) {
+          setGuestPublicNotes(publicNotes);
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authStatus, authUser]);
+
+  useEffect(() => {
+    if (!guestPublicNoteId) {
+      setGuestPublicDetail(null);
+      setGuestPublicMissing(false);
+      return;
+    }
+
+    let cancelled = false;
+    setGuestPublicDetail(null);
+    setGuestPublicMissing(false);
+
+    fetchPublicNote(guestPublicNoteId)
+      .then((publicNote) => {
+        if (!cancelled) {
+          if (publicNote) {
+            setGuestPublicDetail(publicNote);
+          } else {
+            setGuestPublicMissing(true);
+          }
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setGuestPublicMissing(true);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [guestPublicNoteId]);
+
+  function handleSelectPublicNote(noteId: string) {
+    setGuestPublicNoteId(noteId);
+    setIsNoteSidebarOpen(false);
+    setMobileWorkspaceView("preview");
+  }
+
+  function closePublicNote() {
+    setGuestPublicNoteId(null);
+    setMobileWorkspaceView("notes");
+  }
+
   function handleSelectNote(noteId: string) {
     const selectedNote = noteDocuments.find((note) => note.id === noteId);
 
@@ -1439,6 +1524,7 @@ export default function App() {
       : "editor";
 
     setAiReviewNoteId(null);
+    setGuestPublicNoteId(null);
     selectNote(noteId);
     setIsShareOpen(false);
     setIsNoteSidebarOpen(false);
@@ -2069,6 +2155,9 @@ export default function App() {
             onSearchQueryChange={setSearchQuery}
             onSelectNote={handleSelectNote}
             onTogglePublic={togglePublic}
+            publicNotes={authUser ? undefined : guestPublicNotes}
+            activePublicNoteId={guestPublicNoteId}
+            onSelectPublicNote={handleSelectPublicNote}
             onTogglePinned={togglePinned}
             onToggleStarred={toggleStarred}
             isDesktopCategoryCollapsed={isDesktopCategoryCollapsed}
@@ -2244,25 +2333,35 @@ export default function App() {
             </button>
           </div>
 
-          <EditorPanel
-            key={activeNoteId}
-            ref={editorPanelRef}
-            markdown={markdown}
-            onImageImportingChange={setIsImportingImage}
-            onMarkdownChange={setMarkdown}
-          />
+          {guestPublicNoteId ? (
+            <PublicNoteReader
+              detail={guestPublicDetail}
+              missing={guestPublicMissing}
+              onClose={closePublicNote}
+            />
+          ) : (
+            <>
+              <EditorPanel
+                key={activeNoteId}
+                ref={editorPanelRef}
+                markdown={markdown}
+                onImageImportingChange={setIsImportingImage}
+                onMarkdownChange={setMarkdown}
+              />
 
-          <PreviewPanel
-            notes={notes}
-            exportError={exportError}
-            footerBrand={footerBrand}
-            footerLogoUrl={footerLogoUrl}
-            footerVia={footerVia}
-            noteCardTheme={noteCardTheme}
-            onFooterBrandChange={setFooterBrand}
-            onFooterViaChange={setFooterVia}
-            onNoteCardThemeChange={setNoteCardThemeOverride}
-          />
+              <PreviewPanel
+                notes={notes}
+                exportError={exportError}
+                footerBrand={footerBrand}
+                footerLogoUrl={footerLogoUrl}
+                footerVia={footerVia}
+                noteCardTheme={noteCardTheme}
+                onFooterBrandChange={setFooterBrand}
+                onFooterViaChange={setFooterVia}
+                onNoteCardThemeChange={setNoteCardThemeOverride}
+              />
+            </>
+          )}
 
           <div className="category-empty-workspace" role="status">
             <p>{activeCategoryId === "trash" ? "回收站为空" : "这个分类还没有便签"}</p>

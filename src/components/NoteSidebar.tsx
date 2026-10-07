@@ -40,6 +40,10 @@ import {
   isNotePinned,
   orderNoteDocuments,
 } from "../lib/notes.js";
+import {
+  formatPublicNoteTime,
+  type PublicNoteSummary,
+} from "../lib/public-notes.js";
 import type { NoteDocument } from "../types/app.js";
 
 interface NoteSidebarProps {
@@ -58,6 +62,9 @@ interface NoteSidebarProps {
   onRestoreNote: (noteId: string) => void;
   onSearchQueryChange: (query: string) => void;
   onSelectNote: (noteId: string) => void;
+  publicNotes?: PublicNoteSummary[];
+  activePublicNoteId?: string | null;
+  onSelectPublicNote?: (noteId: string) => void;
   onTogglePublic: (noteId: string) => void;
   onTogglePinned: (noteId: string) => void;
   onToggleStarred: (noteId: string) => void;
@@ -511,6 +518,9 @@ export function NoteSidebar({
   onTogglePinned,
   onToggleStarred,
   onToggleDesktopCategory,
+  publicNotes,
+  activePublicNoteId,
+  onSelectPublicNote,
 }: NoteSidebarProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [activeDragNoteId, setActiveDragNoteId] = useState<string | null>(null);
@@ -622,6 +632,32 @@ export function NoteSidebar({
           onChange={(event) => onSearchQueryChange(event.target.value)}
         />
       </label>
+
+      {publicNotes && publicNotes.length > 0 ? (
+        <section className="note-list-public" aria-label="公开便签">
+          <h3 className="note-list-public-title">公开便签 · 游客可见</h3>
+          <ul className="note-list-public-items">
+            {publicNotes.map((note) => (
+              <li key={note.id}>
+                <button
+                  type="button"
+                  className={`note-list-public-item${
+                    note.id === activePublicNoteId ? " is-active" : ""
+                  }`}
+                  onClick={() => onSelectPublicNote?.(note.id)}
+                >
+                  <span className="note-list-public-item-title">
+                    {note.title}
+                  </span>
+                  <span className="note-list-public-item-meta">
+                    {note.author} · {formatPublicNoteTime(note.updatedAt)}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       <DndContext
         sensors={sensors}

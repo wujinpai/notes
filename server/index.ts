@@ -4872,6 +4872,7 @@ app.get(
       note: {
         id: entry.note.id,
         title: getNoteTitle(entry.note.markdown),
+        preview: getNotePreview(entry.note.markdown),
         markdown: entry.note.markdown,
         author: authors.get(entry.authorId) ?? "用户",
         createdAt: entry.note.createdAt,

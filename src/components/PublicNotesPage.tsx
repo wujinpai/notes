@@ -25,6 +25,7 @@ export function PublicNotesPage() {
   const theme = useResolvedTheme(themePreference);
   const [notes, setNotes] = useState<PublicNoteSummary[] | null>(null);
   const [detail, setDetail] = useState<PublicNoteDetail | null>(null);
+  const [detailMissing, setDetailMissing] = useState(false);
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -59,16 +60,22 @@ export function PublicNotesPage() {
   useEffect(() => {
     if (!selectedNoteId) {
       setDetail(null);
+      setDetailMissing(false);
       return;
     }
 
     let cancelled = false;
     setDetail(null);
+    setDetailMissing(false);
 
     fetchPublicNote(selectedNoteId)
       .then((publicNote) => {
         if (!cancelled) {
-          setDetail(publicNote);
+          if (publicNote) {
+            setDetail(publicNote);
+          } else {
+            setDetailMissing(true);
+          }
         }
       })
       .catch((loadError: unknown) => {
@@ -126,6 +133,10 @@ export function PublicNotesPage() {
                 <MarkdownText>{detail.markdown}</MarkdownText>
               </div>
             </>
+          ) : detailMissing ? (
+            <p className="public-notes-status">
+              这篇便签没有对游客显示，或者已经被作者隐藏了。
+            </p>
           ) : (
             <p className="public-notes-status">正在加载这篇便签…</p>
           )}

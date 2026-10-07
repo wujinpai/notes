@@ -314,11 +314,16 @@ test("游客只能看到设为公开的便签，隐藏或删除后立即不可�
     const detailResponse = await fetch(`${baseUrl}/api/public/notes/note-public`);
     assert.equal(detailResponse.status, 200);
     const detail = (await detailResponse.json()) as {
-      note: { author: string; markdown: string; title: string };
+      note: PublicNoteSummaryPayload & { markdown: string };
     };
     assert.equal(detail.note.title, "公开的便签");
     assert.equal(detail.note.author, "public-owner");
     assert.match(detail.note.markdown, /这是游客能看到的内容/);
+    // 详情响应必须带齐前端解析所需的全部字段（含 preview），与列表保持同一形状。
+    assert.match(detail.note.preview, /游客能看到/);
+    assert.equal(detail.note.publicAt, 1_500);
+    assert.equal(typeof detail.note.createdAt, "number");
+    assert.equal(typeof detail.note.updatedAt, "number");
 
     for (const hiddenId of ["note-private", "note-deleted", "note-other", "note-missing"]) {
       const hiddenResponse = await fetch(

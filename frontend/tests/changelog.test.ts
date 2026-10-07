@@ -133,7 +133,7 @@ test("changelog 解析器保留便签分节并解析版本比较链接", () => {
   const sections = getChangelogSections(changelog);
   const hasUnreleasedSection = /^## \[未发布\]/m.test(changelog);
   const currentReleaseSectionIndex = hasUnreleasedSection ? 2 : 1;
-  const draftReleaseSectionIndex = currentReleaseSectionIndex + 5;
+  const draftReleaseSectionIndex = currentReleaseSectionIndex + 6;
   const frameReleaseSectionIndex = draftReleaseSectionIndex + 1;
   const gifReleaseSectionIndex = frameReleaseSectionIndex + 1;
   const previousReleaseSectionIndex = gifReleaseSectionIndex + 1;
@@ -149,13 +149,22 @@ test("changelog 解析器保留便签分节并解析版本比较链接", () => {
   }
   assert.equal(
     sections[currentReleaseSectionIndex]?.heading,
-    "[1.10.8](https://github.com/wujinpai/notes/compare/1.10.7...1.10.8) - 2026-10-08",
+    "[1.10.9](https://github.com/wujinpai/notes/compare/1.10.8...1.10.9) - 2026-10-08",
   );
   assert.match(
     sections[currentReleaseSectionIndex]?.content ?? "",
+    /登录.*首页.*自己的便签.*两次.*公开.*卡片.*游客/s,
+  );
+  const previousRelease1108SectionIndex = currentReleaseSectionIndex + 1;
+  assert.equal(
+    sections[previousRelease1108SectionIndex]?.heading,
+    "[1.10.8](https://github.com/wujinpai/notes/compare/1.10.7...1.10.8) - 2026-10-08",
+  );
+  assert.match(
+    sections[previousRelease1108SectionIndex]?.content ?? "",
     /访客.*自助注册.*滑块验证.*超级管理员.*删除.*公开便签.*主题.*分享/s,
   );
-  const previousRelease1107SectionIndex = currentReleaseSectionIndex + 1;
+  const previousRelease1107SectionIndex = currentReleaseSectionIndex + 2;
   assert.equal(
     sections[previousRelease1107SectionIndex]?.heading,
     "[1.10.7](https://github.com/zhaoolee/notes/compare/1.10.6...1.10.7) - 2026-10-02",
@@ -164,7 +173,7 @@ test("changelog 解析器保留便签分节并解析版本比较链接", () => {
     sections[previousRelease1107SectionIndex]?.content ?? "",
     /公众号.*Markdown 列表.*空行.*多余圆点.*列表外.*正文空行/s,
   );
-  const blankLineReleaseSectionIndex = currentReleaseSectionIndex + 2;
+  const blankLineReleaseSectionIndex = currentReleaseSectionIndex + 3;
   assert.equal(
     sections[blankLineReleaseSectionIndex]?.heading,
     "[1.10.6](https://github.com/zhaoolee/notes/compare/1.10.5...1.10.6) - 2026-09-29",
@@ -173,7 +182,7 @@ test("changelog 解析器保留便签分节并解析版本比较链接", () => {
     sections[blankLineReleaseSectionIndex]?.content ?? "",
     /公众号.*Markdown 空行.*完整高度.*普通换行.*连续空行/s,
   );
-  const headingFixReleaseSectionIndex = currentReleaseSectionIndex + 3;
+  const headingFixReleaseSectionIndex = currentReleaseSectionIndex + 4;
   assert.equal(
     sections[headingFixReleaseSectionIndex]?.heading,
     "[1.10.5](https://github.com/zhaoolee/notes/compare/1.10.4...1.10.5) - 2026-09-26",
@@ -182,7 +191,7 @@ test("changelog 解析器保留便签分节并解析版本比较链接", () => {
     sections[headingFixReleaseSectionIndex]?.content ?? "",
     /公众号草稿.*Markdown 小标题前后的连续空行.*换行.*分节时丢失/s,
   );
-  const previousFixReleaseSectionIndex = currentReleaseSectionIndex + 4;
+  const previousFixReleaseSectionIndex = currentReleaseSectionIndex + 5;
   assert.equal(
     sections[previousFixReleaseSectionIndex]?.heading,
     "[1.10.4](https://github.com/zhaoolee/notes/compare/1.10.3...1.10.4) - 2026-09-26",

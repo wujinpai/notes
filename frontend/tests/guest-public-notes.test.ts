@@ -43,7 +43,7 @@ const publicSummary: PublicNoteSummary = {
   publicAt: 3_000,
 };
 
-test("首页侧栏在游客视图渲染公开便签区块", () => {
+test("首页便签列表把公开便签混排为普通卡片", () => {
   const html = renderToStaticMarkup(
     createElement(NoteSidebar, {
       ...sidebarProps,
@@ -53,16 +53,15 @@ test("首页侧栏在游客视图渲染公开便签区块", () => {
     }),
   );
 
-  assert.match(html, /公开便签 · 游客可见/);
+  assert.match(html, /note-list-item note-list-item-public active/);
   assert.match(html, /游客能看的便签/);
-  assert.match(html, /jisu/);
-  assert.match(html, /is-active/);
+  assert.match(html, /jisu · 公开/);
 });
 
-test("首页侧栏没有公开便签时不渲染游客区块", () => {
+test("首页便签列表没有公开便签时不渲染公开卡片", () => {
   const html = renderToStaticMarkup(createElement(NoteSidebar, sidebarProps));
 
-  assert.doesNotMatch(html, /note-list-public/);
+  assert.doesNotMatch(html, /note-list-item-public/);
 });
 
 test("公开便签阅读器渲染正文与只读标记", () => {

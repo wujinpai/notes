@@ -40,10 +40,7 @@ import {
   isNotePinned,
   orderNoteDocuments,
 } from "../lib/notes.js";
-import {
-  formatPublicNoteTime,
-  type PublicNoteSummary,
-} from "../lib/public-notes.js";
+import { type PublicNoteSummary } from "../lib/public-notes.js";
 import type { NoteDocument } from "../types/app.js";
 
 interface NoteSidebarProps {
@@ -633,32 +630,6 @@ export function NoteSidebar({
         />
       </label>
 
-      {publicNotes && publicNotes.length > 0 ? (
-        <section className="note-list-public" aria-label="公开便签">
-          <h3 className="note-list-public-title">公开便签 · 游客可见</h3>
-          <ul className="note-list-public-items">
-            {publicNotes.map((note) => (
-              <li key={note.id}>
-                <button
-                  type="button"
-                  className={`note-list-public-item${
-                    note.id === activePublicNoteId ? " is-active" : ""
-                  }`}
-                  onClick={() => onSelectPublicNote?.(note.id)}
-                >
-                  <span className="note-list-public-item-title">
-                    {note.title}
-                  </span>
-                  <span className="note-list-public-item-meta">
-                    {note.author} · {formatPublicNoteTime(note.updatedAt)}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
-
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
@@ -751,6 +722,40 @@ export function NoteSidebar({
               ) : null}
             </div>
           )}
+
+          {!isTrashView &&
+          !isSearchActive &&
+          publicNotes &&
+          publicNotes.length > 0
+            ? publicNotes.map((note) => (
+                <div
+                  key={note.id}
+                  className={`note-list-item note-list-item-public${
+                    note.id === activePublicNoteId ? " active" : ""
+                  }`}
+                  role="listitem"
+                >
+                  <div className="note-list-card">
+                    <button
+                      type="button"
+                      className="note-list-select"
+                      aria-current={
+                        note.id === activePublicNoteId ? "page" : undefined
+                      }
+                      onClick={() => onSelectPublicNote?.(note.id)}
+                    >
+                      <span className="note-list-meta">
+                        <span>{formatUpdatedAt(note.updatedAt)}</span>
+                        <span className="note-list-public-author">
+                          {note.author} · 公开
+                        </span>
+                      </span>
+                      <strong>{note.title}</strong>
+                    </button>
+                  </div>
+                </div>
+              ))
+            : null}
         </div>
         <DragOverlay
           adjustScale={false}

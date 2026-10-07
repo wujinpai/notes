@@ -10951,3 +10951,73 @@ body.promo-studio-active {
     display: none;
   }
 }
+
+/* ── 首页游客公开便签 ─────────────────────────────── */
+
+.note-list-public-author {
+  color: #a8782f;
+}
+
+.public-note-reader {
+  height: 100%;
+  max-height: 100%;
+  padding: 24px 22px 56px;
+  overflow-y: auto;
+  background: var(--note-list-surface);
+  color: var(--text-primary, #2e2a26);
+  font-family: var(--ui-font);
+}
+
+.app-layout:not([data-render-mode="playwright"]) .public-note-reader {
+  grid-column: 3;
+  grid-row: 2;
+}
+
+.public-note-reader-back {
+  margin-bottom: 18px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #8a6a45;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.public-note-reader-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  max-width: 780px;
+  margin: 0 auto 18px;
+  color: #97836a;
+  font-size: 13px;
+}
+
+.public-note-reader-badge {
+  padding: 2px 8px;
+  border: 1px solid #c08a3e;
+  border-radius: 999px;
+  color: #a8782f;
+  font-size: 12px;
+}
+
+.public-note-reader-markdown {
+  max-width: 780px;
+  margin: 0 auto;
+  font-size: 15px;
+  line-height: 1.8;
+  overflow-wrap: break-word;
+}
+
+@media (max-width: 640px) {
+  .public-note-reader {
+    width: 100%;
+    height: calc(100% - 50px);
+    max-height: calc(100% - 50px);
+  }
+
+  .app-layout[data-mobile-view="notes"] .public-note-reader {
+    display: none;
+  }
+}

@@ -3,14 +3,18 @@ import {
   createManagedUser,
   deleteManagedUser,
   getAuthSession,
+  getSmtpSettings,
   listManagedUsers,
   loginSuperAdmin,
   logoutUser,
   resetManagedUserPassword,
+  saveSmtpSettings,
+  sendSmtpTestMail,
   type AccountSummary,
   type AuthUser,
   type CreatedAccount,
   type ResetAccountPassword,
+  type SmtpSettings,
 } from "../lib/auth.js";
 import { copyTextToClipboard } from "../lib/clipboard.js";
 import { LoginDialog } from "./LoginDialog.js";
@@ -25,7 +29,22 @@ function formatCreatedAt(timestamp: number): string {
 
 export function SuperAdminPage() {
   const [session, setSession] = useState<AuthUser | null>(null);
+  const [activeTab, setActiveTab] = useState<"smtp" | "users">("users");
   const [users, setUsers] = useState<AccountSummary[]>([]);
+  const [smtpHost, setSmtpHost] = useState("");
+  const [smtpPort, setSmtpPort] = useState("465");
+  const [smtpSecure, setSmtpSecure] = useState(true);
+  const [smtpUser, setSmtpUser] = useState("");
+  const [smtpPass, setSmtpPass] = useState("");
+  const [smtpFrom, setSmtpFrom] = useState("");
+  const [smtpFromName, setSmtpFromName] = useState("");
+  const [smtpEnabled, setSmtpEnabled] = useState(false);
+  const [smtpHasPass, setSmtpHasPass] = useState(false);
+  const [smtpError, setSmtpError] = useState("");
+  const [smtpNotice, setSmtpNotice] = useState("");
+  const [isSavingSmtp, setIsSavingSmtp] = useState(false);
+  const [testMailTo, setTestMailTo] = useState("");
+  const [isTestingMail, setIsTestingMail] = useState(false);
   const [username, setUsername] = useState("");
   const [createdAccount, setCreatedAccount] =
     useState<CreatedAccount | null>(null);
@@ -55,6 +74,81 @@ export function SuperAdminPage() {
     setUsers(await listManagedUsers());
   }
 
+  function applySmtpSettings(settings: SmtpSettings) {
+    setSmtpHost(settings.host);
+    setSmtpPort(String(settings.port));
+    setSmtpSecure(settings.secure);
+    setSmtpUser(settings.user);
+    setSmtpFrom(settings.from);
+    setSmtpFromName(settings.fromName);
+    setSmtpEnabled(settings.enabled);
+    setSmtpHasPass(settings.hasPass);
+    setSmtpPass("");
+  }
+
+  async function loadSmtpSettings() {
+    applySmtpSettings(await getSmtpSettings());
+  }
+
+  async function handleSaveSmtp(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (isSavingSmtp) {
+      return;
+    }
+
+    const port = Number(smtpPort);
+
+    if (!Number.isInteger(port) || port < 1 || port > 65535) {
+      setSmtpError("SMTP 端口应为 1–65535 的整数。");
+      return;
+    }
+
+    try {
+      setIsSavingSmtp(true);
+      setSmtpError("");
+      setSmtpNotice("");
+      const saved = await saveSmtpSettings({
+        enabled: smtpEnabled,
+        from: smtpFrom,
+        fromName: smtpFromName,
+        host: smtpHost,
+        pass: smtpPass || undefined,
+        port,
+        secure: smtpSecure,
+        user: smtpUser,
+      });
+      applySmtpSettings(saved);
+      setSmtpNotice("邮箱设置已保存，立即生效。");
+    } catch (saveError) {
+      setSmtpError(
+        saveError instanceof Error ? saveError.message : "保存邮箱设置失败。",
+      );
+    } finally {
+      setIsSavingSmtp(false);
+    }
+  }
+
+  async function handleSendTestMail() {
+    if (isTestingMail) {
+      return;
+    }
+
+    try {
+      setIsTestingMail(true);
+      setSmtpError("");
+      setSmtpNotice("");
+      const result = await sendSmtpTestMail(testMailTo);
+      setSmtpNotice(`测试邮件已发送到 ${result.to}。`);
+    } catch (testError) {
+      setSmtpError(
+        testError instanceof Error ? testError.message : "测试邮件发送失败。",
+      );
+    } finally {
+      setIsTestingMail(false);
+    }
+  }
+
   useEffect(() => {
     let cancelled = false;
 
@@ -69,6 +163,7 @@ export function SuperAdminPage() {
         if (currentSession?.role === "superadmin") {
           setSession(currentSession);
           await loadUsers();
+          await loadSmtpSettings();
         }
       } catch (loadError) {
         if (!cancelled) {
@@ -94,6 +189,7 @@ export function SuperAdminPage() {
     setSession(user);
     setError("");
     await loadUsers();
+    await loadSmtpSettings();
   }
 
   async function handleCreateUser(event: FormEvent<HTMLFormElement>) {
@@ -128,6 +224,9 @@ export function SuperAdminPage() {
       setUsers([]);
       setCreatedAccount(null);
       setResetAccount(null);
+      setActiveTab("users");
+      setSmtpError("");
+      setSmtpNotice("");
     }
   }
 
@@ -238,6 +337,29 @@ export function SuperAdminPage() {
       </header>
 
       <div className="superadmin-content">
+        <div className="superadmin-tabs" role="tablist" aria-label="管理功能">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "users"}
+            className={activeTab === "users" ? "is-active" : ""}
+            onClick={() => setActiveTab("users")}
+          >
+            用户管理
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "smtp"}
+            className={activeTab === "smtp" ? "is-active" : ""}
+            onClick={() => setActiveTab("smtp")}
+          >
+            邮箱设置
+          </button>
+        </div>
+
+        {activeTab === "users" ? (
+          <>
         <section className="superadmin-card superadmin-create-card">
           <div>
             <h2>添加普通用户</h2>
@@ -347,6 +469,7 @@ export function SuperAdminPage() {
                 <thead>
                   <tr>
                     <th>用户名或邮箱</th>
+                    <th>绑定邮箱</th>
                     <th>创建时间</th>
                     <th>用户 ID</th>
                     <th>操作</th>
@@ -356,6 +479,7 @@ export function SuperAdminPage() {
                   {users.map((user) => (
                     <tr key={user.id}>
                       <td>{user.username}</td>
+                      <td>{user.email ?? "未绑定"}</td>
                       <td>{formatCreatedAt(user.createdAt)}</td>
                       <td>
                         <code>{user.id}</code>
@@ -405,6 +529,135 @@ export function SuperAdminPage() {
             <p className="superadmin-empty">还没有普通用户。</p>
           )}
         </section>
+          </>
+        ) : null}
+
+        {activeTab === "smtp" ? (
+          <section className="superadmin-card superadmin-smtp-card">
+            <div>
+              <h2>邮箱设置（SMTP）</h2>
+              <p>
+                用于注册与绑定邮箱时发送验证码。保存后立即生效；未启用或未配置时回退服务端环境变量
+                SMTP_*，再无配置时验证码打印到服务端日志。密码加密存储，页面只显示是否已设置。
+              </p>
+            </div>
+            <form className="superadmin-smtp-form" onSubmit={handleSaveSmtp}>
+              <label>
+                <span>SMTP 主机</span>
+                <input
+                  type="text"
+                  value={smtpHost}
+                  placeholder="smtp.example.com"
+                  autoComplete="off"
+                  onChange={(event) => setSmtpHost(event.target.value)}
+                />
+              </label>
+              <label>
+                <span>端口</span>
+                <input
+                  type="number"
+                  value={smtpPort}
+                  min={1}
+                  max={65535}
+                  onChange={(event) => setSmtpPort(event.target.value)}
+                />
+              </label>
+              <label>
+                <span>SMTP 账号</span>
+                <input
+                  type="text"
+                  value={smtpUser}
+                  placeholder="name@example.com"
+                  autoComplete="off"
+                  onChange={(event) => setSmtpUser(event.target.value)}
+                />
+              </label>
+              <label>
+                <span>
+                  SMTP 密码{ smtpHasPass ? "（已设置，留空不修改）" : "（未设置）"}
+                </span>
+                <input
+                  type="password"
+                  value={smtpPass}
+                  placeholder={smtpHasPass ? "留空表示不修改" : "请输入 SMTP 密码"}
+                  autoComplete="new-password"
+                  onChange={(event) => setSmtpPass(event.target.value)}
+                />
+              </label>
+              <label>
+                <span>发件邮箱</span>
+                <input
+                  type="email"
+                  value={smtpFrom}
+                  placeholder="留空则使用 SMTP 账号"
+                  autoComplete="off"
+                  onChange={(event) => setSmtpFrom(event.target.value)}
+                />
+              </label>
+              <label>
+                <span>发件人名称</span>
+                <input
+                  type="text"
+                  value={smtpFromName}
+                  placeholder="锤子便签"
+                  maxLength={64}
+                  autoComplete="off"
+                  onChange={(event) => setSmtpFromName(event.target.value)}
+                />
+              </label>
+              <label className="superadmin-smtp-check">
+                <input
+                  type="checkbox"
+                  checked={smtpSecure}
+                  onChange={(event) => setSmtpSecure(event.target.checked)}
+                />
+                <span>使用 SSL/TLS（secure，常见于 465 端口）</span>
+              </label>
+              <label className="superadmin-smtp-check">
+                <input
+                  type="checkbox"
+                  checked={smtpEnabled}
+                  onChange={(event) => setSmtpEnabled(event.target.checked)}
+                />
+                <span>启用后台 SMTP 配置发信</span>
+              </label>
+              <button type="submit" disabled={isSavingSmtp}>
+                {isSavingSmtp ? "正在保存..." : "保存邮箱设置"}
+              </button>
+            </form>
+
+            <div className="superadmin-smtp-test">
+              <label>
+                <span>测试收件邮箱</span>
+                <input
+                  type="email"
+                  value={testMailTo}
+                  placeholder="留空则发送到发件邮箱"
+                  autoComplete="off"
+                  onChange={(event) => setTestMailTo(event.target.value)}
+                />
+              </label>
+              <button
+                type="button"
+                disabled={isTestingMail}
+                onClick={() => void handleSendTestMail()}
+              >
+                {isTestingMail ? "正在发送..." : "发送测试邮件"}
+              </button>
+            </div>
+
+            {smtpError ? (
+              <p className="superadmin-error" role="alert">
+                {smtpError}
+              </p>
+            ) : null}
+            {smtpNotice ? (
+              <p className="superadmin-notice" role="status">
+                {smtpNotice}
+              </p>
+            ) : null}
+          </section>
+        ) : null}
       </div>
     </main>
   );

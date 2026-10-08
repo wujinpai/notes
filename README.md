@@ -145,7 +145,7 @@ docker run -d \
   --env-file .env \
   -v "$(pwd)/storage/images:/app/storage/images" \
   -v "$(pwd)/storage/data:/app/storage/data" \
-  zhaoolee/notes:latest
+  wujinpai/notes:latest
 ```
 
 启动后访问 `http://127.0.0.1:18080`。`storage/images` 保存图片和导出的 PNG，

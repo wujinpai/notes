@@ -52,9 +52,13 @@ import {
   createSessionCookie,
   createSessionToken,
   createSkillToken,
+  DuplicateEmailError,
   DuplicateUsernameError,
+  EmailCodeTooFrequentError,
   getShanghaiDateKey,
   InvalidCurrentPasswordError,
+  InvalidEmailCodeError,
+  InvalidEmailError,
   InvalidNewPasswordError,
   InvalidWechatConfigurationError,
   InvalidUsernameError,
@@ -62,6 +66,7 @@ import {
   NotesDataStore,
   readSessionToken,
   safeStringEqual,
+  validateEmailAddress,
   verifySessionToken,
   verifySkillToken,
   WorkspaceConflictError,
@@ -69,7 +74,18 @@ import {
   type AuthRole,
   type AuthSession,
   type AuthUser,
+  type EmailCodePurpose,
 } from "./auth.js";
+import {
+  encryptSmtpPassword,
+  getSmtpSettingsView,
+  logEmailCode,
+  resolveSmtpConfig,
+  sendTestMail,
+  sendVerificationCodeMail,
+  toSmtpConfig,
+  type SmtpSettingsView,
+} from "./mail.js";
 import {
   checkAiAvailability,
   createAiSuggestions,
@@ -137,8 +153,37 @@ interface LoginRequestBody {
 
 interface RegisterRequestBody {
   captchaToken?: string;
+  email?: string;
+  emailCode?: string;
   password?: string;
   username?: string;
+}
+
+interface EmailCodeRequestBody {
+  captchaToken?: string;
+  email?: string;
+  purpose?: string;
+}
+
+interface BindEmailRequestBody {
+  currentPassword?: string;
+  email?: string;
+  emailCode?: string;
+}
+
+interface SmtpSettingsRequestBody {
+  enabled?: unknown;
+  from?: unknown;
+  fromName?: unknown;
+  host?: unknown;
+  pass?: unknown;
+  port?: unknown;
+  secure?: unknown;
+  user?: unknown;
+}
+
+interface SmtpTestRequestBody {
+  to?: unknown;
 }
 
 interface CreateUserRequestBody {
@@ -661,6 +706,11 @@ function requireCaptchaToken(
   }
 
   return true;
+}
+
+async function resolveActiveSmtpConfig() {
+  const stored = toSmtpConfig(await notesDataStore.getSmtpSettings());
+  return resolveSmtpConfig(stored);
 }
 
 function resolveLoginCredentials(body: LoginRequestBody | undefined): {
@@ -4193,6 +4243,90 @@ app.post(
 );
 
 app.post(
+  "/api/auth/email-code",
+  async (
+    request: Request<Record<string, never>, unknown, EmailCodeRequestBody>,
+    response: Response,
+  ) => {
+    if (!isSameOriginRequest(request)) {
+      response.status(403).json({ error: "请从当前便签页面获取邮箱验证码。" });
+      return;
+    }
+
+    const purpose = request.body?.purpose;
+
+    if (purpose !== "register" && purpose !== "bind") {
+      response.status(400).json({ error: "验证码用途无效。" });
+      return;
+    }
+
+    const emailInput = request.body?.email;
+
+    if (typeof emailInput !== "string" || !emailInput.trim()) {
+      response.status(400).json({ error: "请输入邮箱。" });
+      return;
+    }
+
+    let email: string;
+
+    try {
+      email = validateEmailAddress(emailInput);
+    } catch (error) {
+      response
+        .status(400)
+        .json({ error: error instanceof Error ? error.message : "请输入有效邮箱。" });
+      return;
+    }
+
+    if (
+      purpose === "bind" &&
+      !(await requireAuthenticatedUser(request, response, "user"))
+    ) {
+      return;
+    }
+
+    if (!requireCaptchaToken(request.body?.captchaToken, response)) {
+      return;
+    }
+
+    if (purpose === "register" && (await notesDataStore.isEmailTaken(email))) {
+      response.status(409).json({ error: new DuplicateEmailError().message });
+      return;
+    }
+
+    try {
+      const code = await notesDataStore.prepareEmailCode(
+        email,
+        purpose as EmailCodePurpose,
+      );
+      const smtp = await resolveActiveSmtpConfig();
+
+      if (smtp) {
+        try {
+          await sendVerificationCodeMail(smtp, email, code);
+        } catch (error) {
+          response.status(502).json({
+            error: `验证码发送失败：${error instanceof Error ? error.message : "发送失败"}`,
+          });
+          return;
+        }
+      } else {
+        logEmailCode(email, code);
+      }
+
+      response.json({ ok: true });
+    } catch (error) {
+      if (error instanceof EmailCodeTooFrequentError) {
+        response.status(429).json({ error: error.message });
+        return;
+      }
+
+      response.status(500).json({ error: "验证码发送失败，请稍后重试。" });
+    }
+  },
+);
+
+app.post(
   "/api/auth/register",
   async (
     request: Request<Record<string, never>, unknown, RegisterRequestBody>,
@@ -4200,9 +4334,16 @@ app.post(
   ) => {
     const username = request.body?.username?.trim();
     const password = request.body?.password;
+    const email = request.body?.email?.trim();
+    const emailCode = request.body?.emailCode?.trim();
 
     if (!username || typeof password !== "string" || !password) {
       response.status(400).json({ error: "请输入用户名或邮箱及密码。" });
+      return;
+    }
+
+    if (!email || !emailCode) {
+      response.status(400).json({ error: "请输入邮箱与邮箱验证码。" });
       return;
     }
 
@@ -4211,7 +4352,12 @@ app.post(
     }
 
     try {
-      const account = await notesDataStore.registerUser(username, password);
+      const account = await notesDataStore.registerUser(
+        username,
+        password,
+        email,
+        emailCode,
+      );
       const user: AuthUser = {
         id: account.id,
         role: "user",
@@ -4226,14 +4372,19 @@ app.post(
       );
       response.json({ user });
     } catch (error) {
-      if (error instanceof DuplicateUsernameError) {
+      if (
+        error instanceof DuplicateUsernameError ||
+        error instanceof DuplicateEmailError
+      ) {
         response.status(409).json({ error: error.message });
         return;
       }
 
       if (
         error instanceof InvalidUsernameError ||
-        error instanceof InvalidNewPasswordError
+        error instanceof InvalidNewPasswordError ||
+        error instanceof InvalidEmailError ||
+        error instanceof InvalidEmailCodeError
       ) {
         response.status(400).json({ error: error.message });
         return;
@@ -4544,6 +4695,73 @@ app.post(
   },
 );
 
+app.get(
+  "/api/auth/email",
+  async (request: Request, response: Response) => {
+    const session = await requireAuthenticatedUser(request, response, "user");
+
+    if (!session) {
+      return;
+    }
+
+    response.json({ email: await notesDataStore.getUserEmail(session.id) });
+  },
+);
+
+app.post(
+  "/api/auth/email/bind",
+  async (
+    request: Request<Record<string, never>, unknown, BindEmailRequestBody>,
+    response: Response,
+  ) => {
+    const session = await requireAuthenticatedUser(request, response, "user");
+
+    if (!session) {
+      return;
+    }
+
+    const currentPassword = request.body?.currentPassword;
+    const email = request.body?.email?.trim();
+    const emailCode = request.body?.emailCode?.trim();
+
+    if (
+      typeof currentPassword !== "string" ||
+      !currentPassword ||
+      !email ||
+      !emailCode
+    ) {
+      response
+        .status(400)
+        .json({ error: "请输入当前密码、新邮箱与邮箱验证码。" });
+      return;
+    }
+
+    try {
+      const result = await notesDataStore.bindEmail(
+        session.id,
+        currentPassword,
+        email,
+        emailCode,
+      );
+      response.json(result);
+    } catch (error) {
+      const status =
+        error instanceof DuplicateEmailError
+          ? 409
+          : error instanceof InvalidCurrentPasswordError ||
+              error instanceof InvalidEmailError ||
+              error instanceof InvalidEmailCodeError
+            ? 400
+            : error instanceof AccountNotFoundError
+              ? 404
+              : 500;
+      response.status(status).json({
+        error: error instanceof Error ? error.message : "绑定邮箱失败。",
+      });
+    }
+  },
+);
+
 app.post(
   "/api/superadmin/login",
   (
@@ -4797,6 +5015,123 @@ app.delete(
         .json({
           error: error instanceof Error ? error.message : "删除用户失败。",
         });
+    }
+  },
+);
+
+app.get(
+  "/api/superadmin/smtp-settings",
+  async (request: Request, response: Response) => {
+    if (!(await requireAuthenticatedUser(request, response, "superadmin"))) {
+      return;
+    }
+
+    const view: SmtpSettingsView = getSmtpSettingsView(
+      await notesDataStore.getSmtpSettings(),
+    );
+    response.json(view);
+  },
+);
+
+app.put(
+  "/api/superadmin/smtp-settings",
+  async (
+    request: Request<Record<string, never>, unknown, SmtpSettingsRequestBody>,
+    response: Response,
+  ) => {
+    if (!(await requireAuthenticatedUser(request, response, "superadmin"))) {
+      return;
+    }
+
+    const body = request.body ?? {};
+    const host = typeof body.host === "string" ? body.host.trim() : "";
+    const user = typeof body.user === "string" ? body.user.trim() : "";
+    const from = typeof body.from === "string" ? body.from.trim() : "";
+    const fromName =
+      typeof body.fromName === "string"
+        ? body.fromName.replace(/[\r\n"]/g, "").trim().slice(0, 64)
+        : "";
+    const enabled = body.enabled === true;
+    const secure = body.secure !== false;
+    const port =
+      typeof body.port === "number" && Number.isInteger(body.port)
+        ? body.port
+        : 0;
+
+    if (port < 1 || port > 65535) {
+      response.status(400).json({ error: "SMTP 端口应为 1–65535 的整数。" });
+      return;
+    }
+
+    if (enabled && (!host || !user)) {
+      response
+        .status(400)
+        .json({ error: "启用发信前请填写 SMTP 主机和账号。" });
+      return;
+    }
+
+    if (from) {
+      try {
+        validateEmailAddress(from);
+      } catch {
+        response.status(400).json({ error: "发件邮箱格式不正确。" });
+        return;
+      }
+    }
+
+    const current = await notesDataStore.getSmtpSettings();
+    const passInput = typeof body.pass === "string" ? body.pass : "";
+    const saved = await notesDataStore.saveSmtpSettings({
+      enabled,
+      from,
+      fromName,
+      host,
+      pass: passInput ? encryptSmtpPassword(passInput) : (current?.pass ?? ""),
+      port,
+      secure,
+      updatedAt: Date.now(),
+      user,
+    });
+    response.json(getSmtpSettingsView(saved));
+  },
+);
+
+app.post(
+  "/api/superadmin/smtp-settings/test",
+  async (
+    request: Request<Record<string, never>, unknown, SmtpTestRequestBody>,
+    response: Response,
+  ) => {
+    if (!(await requireAuthenticatedUser(request, response, "superadmin"))) {
+      return;
+    }
+
+    const smtp = await resolveActiveSmtpConfig();
+
+    if (!smtp) {
+      response.status(400).json({
+        error: "尚未配置 SMTP：请先在本页填写并启用，或配置环境变量 SMTP_*。",
+      });
+      return;
+    }
+
+    const toInput = typeof request.body?.to === "string" ? request.body.to.trim() : "";
+    let to = toInput || smtp.from || smtp.user;
+
+    try {
+      to = validateEmailAddress(to);
+    } catch {
+      response.status(400).json({ error: "测试收件邮箱格式不正确。" });
+      return;
+    }
+
+    try {
+      await sendTestMail(smtp, to);
+      response.json({ ok: true, to });
+    } catch (error) {
+      response.status(502).json({
+        error: `测试邮件发送失败：${error instanceof Error ? error.message : "发送失败"}`,
+      });
     }
   },
 );

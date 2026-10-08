@@ -19,6 +19,7 @@ import type { ThemePreferenceId } from "../types/app.js";
 interface SettingsPanelProps {
   aiAvailable?: boolean;
   aiEnabled?: boolean;
+  authEmail?: string | null;
   authUsername?: string | null;
   canConfigureWechat?: boolean;
   canChangePassword?: boolean;
@@ -38,6 +39,7 @@ interface SettingsPanelProps {
   workspaceArchiveError?: string;
   workspaceArchiveProgress?: WorkspaceArchiveProgress | null;
   onAiEnabledChange?: (enabled: boolean) => void;
+  onBindEmail?: () => void;
   onChangePassword?: () => void;
   onClose: () => void;
   onFooterBrandChange?: (footerBrand: string) => void;
@@ -68,6 +70,7 @@ const CHANGELOG_URL = "/changelog";
 export function SettingsPanel({
   aiAvailable = false,
   aiEnabled = false,
+  authEmail = null,
   authUsername = null,
   canConfigureWechat = false,
   canChangePassword = false,
@@ -82,6 +85,7 @@ export function SettingsPanel({
   workspaceArchiveError = "",
   workspaceArchiveProgress = null,
   onAiEnabledChange = () => undefined,
+  onBindEmail,
   onChangePassword,
   onClose,
   onFooterBrandChange = () => undefined,
@@ -510,6 +514,25 @@ export function SettingsPanel({
                         <span className="settings-row-label">
                           修改密码
                           <small>更新密码后，其他设备和旧 Skill Token 会失效</small>
+                        </span>
+                        <span className="settings-row-value">
+                          <span className="settings-row-chevron" aria-hidden="true">›</span>
+                        </span>
+                      </button>
+                    ) : null}
+                    {canChangePassword && onBindEmail ? (
+                      <button
+                        type="button"
+                        className="settings-row"
+                        onClick={onBindEmail}
+                      >
+                        <span className="settings-row-label">
+                          {authEmail ? "更换邮箱" : "绑定邮箱"}
+                          <small>
+                            {authEmail
+                              ? `当前绑定：${authEmail}`
+                              : "尚未绑定，用于接收邮箱验证码"}
+                          </small>
                         </span>
                         <span className="settings-row-value">
                           <span className="settings-row-chevron" aria-hidden="true">›</span>

@@ -2,6 +2,7 @@ import {
   createHash,
   createHmac,
   randomBytes,
+  randomInt,
   randomUUID,
   scrypt,
   timingSafeEqual,
@@ -35,6 +36,7 @@ export interface AuthUser {
 
 export interface AccountSummary {
   createdAt: number;
+  email: string | null;
   id: string;
   username: string;
 }
@@ -77,6 +79,7 @@ export interface AnonymousQuotaStatus {
 }
 
 interface StoredAccount extends AccountSummary {
+  normalizedEmail: string | null;
   normalizedUsername: string;
   passwordHash: string;
   passwordSalt: string;
@@ -84,12 +87,37 @@ interface StoredAccount extends AccountSummary {
   skillTokenVersion: number;
 }
 
+export type EmailCodePurpose = "bind" | "register";
+
+export interface StoredEmailCode {
+  code: string;
+  createdAt: number;
+  email: string;
+  expiresAt: number;
+  purpose: EmailCodePurpose;
+  used: boolean;
+}
+
+export interface SmtpSettingsRecord {
+  enabled: boolean;
+  from: string;
+  fromName: string;
+  host: string;
+  pass: string;
+  port: number;
+  secure: boolean;
+  updatedAt: number;
+  user: string;
+}
+
 interface AuthDatabase {
   anonymousUploadQuota: {
     count: number;
     dateKey: string;
   };
+  emailCodes: StoredEmailCode[];
   hermesInstallLinks: Record<string, string>;
+  smtpSettings: SmtpSettingsRecord | null;
   users: StoredAccount[];
   version: 1;
   wechatConfigurations: Record<string, WechatConfiguration>;
@@ -186,18 +214,76 @@ export class InvalidWechatConfigurationError extends Error {
   }
 }
 
+export class InvalidEmailError extends Error {
+  constructor(message = "请输入有效邮箱。") {
+    super(message);
+    this.name = "InvalidEmailError";
+  }
+}
+
+export class DuplicateEmailError extends Error {
+  constructor() {
+    super("该邮箱已被其他账号使用。");
+    this.name = "DuplicateEmailError";
+  }
+}
+
+export class InvalidEmailCodeError extends Error {
+  constructor() {
+    super("邮箱验证码错误或已过期，请重新获取。");
+    this.name = "InvalidEmailCodeError";
+  }
+}
+
+export class EmailCodeTooFrequentError extends Error {
+  constructor() {
+    super("验证码发送太频繁，请 60 秒后再试。");
+    this.name = "EmailCodeTooFrequentError";
+  }
+}
+
 function createEmptyDatabase(): AuthDatabase {
   return {
     anonymousUploadQuota: {
       count: 0,
       dateKey: "",
     },
+    emailCodes: [],
     hermesInstallLinks: {},
+    smtpSettings: null,
     users: [],
     version: 1,
     wechatConfigurations: {},
     workspaces: {},
   };
+}
+
+export const EMAIL_CODE_TTL_MS = 10 * 60 * 1000;
+export const EMAIL_CODE_RESEND_MS = 60 * 1000;
+
+export function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
+
+export function validateEmailAddress(email: string): string {
+  const normalizedDisplayEmail = email.trim().normalize("NFKC");
+  const [emailLocalPart = "", emailDomain = "", ...extraEmailParts] =
+    normalizedDisplayEmail.split("@");
+  const isEmail =
+    normalizedDisplayEmail.length <= 254 &&
+    emailLocalPart.length > 0 &&
+    emailLocalPart.length <= 64 &&
+    extraEmailParts.length === 0 &&
+    /^[A-Z0-9.!#$%&'*+/=?^_`{|}~-]+$/i.test(emailLocalPart) &&
+    /^(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?$/i.test(
+      emailDomain,
+    );
+
+  if (!isEmail) {
+    throw new InvalidEmailError();
+  }
+
+  return normalizedDisplayEmail;
 }
 
 export function validateWechatAppId(appId: string): string {
@@ -358,7 +444,15 @@ function parseStoredAccount(value: unknown): StoredAccount | null {
   ) {
     return {
       createdAt: account.createdAt,
+      email:
+        typeof account.email === "string" && account.email
+          ? account.email
+          : null,
       id: account.id,
+      normalizedEmail:
+        typeof account.normalizedEmail === "string" && account.normalizedEmail
+          ? account.normalizedEmail
+          : null,
       normalizedUsername: account.normalizedUsername,
       passwordHash: account.passwordHash,
       passwordSalt: account.passwordSalt,
@@ -478,6 +572,71 @@ function parseDatabase(value: unknown): AuthDatabase {
     }
   }
 
+  const emailCodes: StoredEmailCode[] = Array.isArray(database.emailCodes)
+    ? database.emailCodes.flatMap((value) => {
+        if (!value || typeof value !== "object") {
+          return [];
+        }
+
+        const code = value as Partial<StoredEmailCode>;
+
+        if (
+          typeof code.code === "string" &&
+          code.code &&
+          typeof code.email === "string" &&
+          code.email &&
+          (code.purpose === "bind" || code.purpose === "register") &&
+          typeof code.createdAt === "number" &&
+          Number.isFinite(code.createdAt) &&
+          typeof code.expiresAt === "number" &&
+          Number.isFinite(code.expiresAt)
+        ) {
+          return [
+            {
+              code: code.code,
+              createdAt: code.createdAt,
+              email: code.email,
+              expiresAt: code.expiresAt,
+              purpose: code.purpose,
+              used: code.used === true,
+            },
+          ];
+        }
+
+        return [];
+      })
+    : [];
+
+  const rawSmtpSettings =
+    database.smtpSettings && typeof database.smtpSettings === "object"
+      ? (database.smtpSettings as Partial<SmtpSettingsRecord>)
+      : null;
+  const smtpSettings: SmtpSettingsRecord | null =
+    rawSmtpSettings &&
+    typeof rawSmtpSettings.host === "string" &&
+    typeof rawSmtpSettings.port === "number" &&
+    Number.isFinite(rawSmtpSettings.port) &&
+    typeof rawSmtpSettings.user === "string" &&
+    typeof rawSmtpSettings.pass === "string" &&
+    typeof rawSmtpSettings.from === "string" &&
+    typeof rawSmtpSettings.fromName === "string"
+      ? {
+          enabled: rawSmtpSettings.enabled === true,
+          from: rawSmtpSettings.from,
+          fromName: rawSmtpSettings.fromName,
+          host: rawSmtpSettings.host,
+          pass: rawSmtpSettings.pass,
+          port: rawSmtpSettings.port,
+          secure: rawSmtpSettings.secure !== false,
+          updatedAt:
+            typeof rawSmtpSettings.updatedAt === "number" &&
+            Number.isFinite(rawSmtpSettings.updatedAt)
+              ? rawSmtpSettings.updatedAt
+              : 0,
+          user: rawSmtpSettings.user,
+        }
+      : null;
+
   return {
     anonymousUploadQuota: {
       count:
@@ -490,7 +649,9 @@ function parseDatabase(value: unknown): AuthDatabase {
       dateKey:
         quota && typeof quota.dateKey === "string" ? quota.dateKey : "",
     },
+    emailCodes,
     hermesInstallLinks,
+    smtpSettings,
     users: Array.isArray(database.users)
       ? database.users
           .map(parseStoredAccount)
@@ -526,6 +687,36 @@ export function getNextShanghaiMidnight(now = new Date()): string {
   return new Date(
     Date.UTC(year, month - 1, day + 1) - 8 * 60 * 60 * 1000,
   ).toISOString();
+}
+
+function consumeEmailCode(
+  database: AuthDatabase,
+  normalizedEmail: string,
+  code: string,
+  purpose: EmailCodePurpose,
+  now = Date.now(),
+): void {
+  const entry = database.emailCodes
+    .filter(
+      (candidate) =>
+        candidate.email === normalizedEmail &&
+        candidate.purpose === purpose &&
+        !candidate.used,
+    )
+    .sort((left, right) => right.createdAt - left.createdAt)
+    .find((candidate) => candidate.code === code.trim());
+
+  if (!entry || entry.expiresAt < now) {
+    throw new InvalidEmailCodeError();
+  }
+
+  entry.used = true;
+  // 验证码已被成功消费（持有者已证明对邮箱的控制）：清掉同邮箱同用途的历史码，
+  // 换绑释放旧邮箱等场景下可立即重新发码；未消费前的 60 秒重发间隔不受影响。
+  database.emailCodes = database.emailCodes.filter(
+    (candidate) =>
+      candidate.email !== normalizedEmail || candidate.purpose !== purpose,
+  );
 }
 
 export class NotesDataStore {
@@ -587,7 +778,12 @@ export class NotesDataStore {
     const database = await this.readDatabase();
 
     return database.users
-      .map(({ createdAt, id, username }) => ({ createdAt, id, username }))
+      .map(({ createdAt, email, id, username }) => ({
+        createdAt,
+        email: email ?? null,
+        id,
+        username,
+      }))
       .sort((left, right) => right.createdAt - left.createdAt);
   }
 
@@ -609,7 +805,9 @@ export class NotesDataStore {
       const password = await hashPassword(initialPassword);
       const account: StoredAccount = {
         createdAt: Date.now(),
+        email: null,
         id: randomUUID(),
+        normalizedEmail: null,
         normalizedUsername,
         passwordHash: password.hash,
         passwordSalt: password.salt,
@@ -623,6 +821,7 @@ export class NotesDataStore {
 
       return {
         createdAt: account.createdAt,
+        email: null,
         id: account.id,
         initialPassword,
         username: account.username,
@@ -633,11 +832,15 @@ export class NotesDataStore {
   async registerUser(
     username: string,
     password: string,
+    email: string,
+    emailCode: string,
   ): Promise<AuthenticatedAccount> {
     return this.runExclusive(async () => {
       const displayUsername = validateUsername(username);
       const validatedPassword = validateNewPassword(password);
+      const displayEmail = validateEmailAddress(email);
       const normalizedUsername = normalizeUsername(displayUsername);
+      const normalizedEmail = normalizeEmail(displayEmail);
       const database = await this.readDatabase();
 
       if (
@@ -648,10 +851,22 @@ export class NotesDataStore {
         throw new DuplicateUsernameError();
       }
 
+      if (
+        database.users.some(
+          (account) => account.normalizedEmail === normalizedEmail,
+        )
+      ) {
+        throw new DuplicateEmailError();
+      }
+
+      consumeEmailCode(database, normalizedEmail, emailCode, "register");
+
       const hashed = await hashPassword(validatedPassword);
       const account: StoredAccount = {
         createdAt: Date.now(),
+        email: displayEmail,
         id: randomUUID(),
+        normalizedEmail,
         normalizedUsername,
         passwordHash: hashed.hash,
         passwordSalt: hashed.salt,
@@ -665,11 +880,123 @@ export class NotesDataStore {
 
       return {
         createdAt: account.createdAt,
+        email: account.email ?? null,
         id: account.id,
         passwordVersion: account.passwordVersion,
         skillTokenVersion: account.skillTokenVersion,
         username: account.username,
       };
+    });
+  }
+
+  async isEmailTaken(email: string): Promise<boolean> {
+    const normalizedEmail = normalizeEmail(email);
+    const database = await this.readDatabase();
+    return database.users.some(
+      (account) => account.normalizedEmail === normalizedEmail,
+    );
+  }
+
+  async prepareEmailCode(
+    email: string,
+    purpose: EmailCodePurpose,
+    now = Date.now(),
+  ): Promise<string> {
+    return this.runExclusive(async () => {
+      const normalizedEmail = normalizeEmail(email);
+      const database = await this.readDatabase();
+      database.emailCodes = database.emailCodes.filter(
+        (entry) => entry.expiresAt > now - EMAIL_CODE_TTL_MS,
+      );
+      const last = database.emailCodes
+        .filter(
+          (entry) => entry.email === normalizedEmail && entry.purpose === purpose,
+        )
+        .sort((left, right) => right.createdAt - left.createdAt)[0];
+
+      if (last && now - last.createdAt < EMAIL_CODE_RESEND_MS) {
+        throw new EmailCodeTooFrequentError();
+      }
+
+      const code = String(randomInt(100000, 1000000));
+      database.emailCodes.push({
+        code,
+        createdAt: now,
+        email: normalizedEmail,
+        expiresAt: now + EMAIL_CODE_TTL_MS,
+        purpose,
+        used: false,
+      });
+      await this.writeDatabase(database);
+      return code;
+    });
+  }
+
+  async getUserEmail(userId: string): Promise<string | null> {
+    const database = await this.readDatabase();
+    const account = database.users.find((candidate) => candidate.id === userId);
+    return account?.email ?? null;
+  }
+
+  async bindEmail(
+    userId: string,
+    currentPassword: string,
+    email: string,
+    emailCode: string,
+  ): Promise<{ email: string }> {
+    return this.runExclusive(async () => {
+      const database = await this.readDatabase();
+      const account = database.users.find((candidate) => candidate.id === userId);
+
+      if (!account) {
+        throw new AccountNotFoundError();
+      }
+
+      if (
+        !(await verifyPassword(
+          currentPassword,
+          account.passwordSalt,
+          account.passwordHash,
+        ))
+      ) {
+        throw new InvalidCurrentPasswordError();
+      }
+
+      const displayEmail = validateEmailAddress(email);
+      const normalizedEmail = normalizeEmail(displayEmail);
+
+      if (
+        database.users.some(
+          (candidate) =>
+            candidate.id !== userId &&
+            candidate.normalizedEmail === normalizedEmail,
+        )
+      ) {
+        throw new DuplicateEmailError();
+      }
+
+      consumeEmailCode(database, normalizedEmail, emailCode, "bind");
+
+      account.email = displayEmail;
+      account.normalizedEmail = normalizedEmail;
+      await this.writeDatabase(database);
+      return { email: displayEmail };
+    });
+  }
+
+  async getSmtpSettings(): Promise<SmtpSettingsRecord | null> {
+    const database = await this.readDatabase();
+    return database.smtpSettings;
+  }
+
+  async saveSmtpSettings(
+    settings: SmtpSettingsRecord,
+  ): Promise<SmtpSettingsRecord> {
+    return this.runExclusive(async () => {
+      const database = await this.readDatabase();
+      database.smtpSettings = settings;
+      await this.writeDatabase(database);
+      return settings;
     });
   }
 
@@ -696,6 +1023,7 @@ export class NotesDataStore {
 
     return {
       createdAt: account.createdAt,
+      email: account.email ?? null,
       id: account.id,
       passwordVersion: account.passwordVersion,
       skillTokenVersion: account.skillTokenVersion,
@@ -710,6 +1038,7 @@ export class NotesDataStore {
     return account
       ? {
           createdAt: account.createdAt,
+          email: account.email ?? null,
           id: account.id,
           passwordVersion: account.passwordVersion,
           skillTokenVersion: account.skillTokenVersion,
@@ -832,6 +1161,7 @@ export class NotesDataStore {
 
       return {
         createdAt: account.createdAt,
+        email: account.email ?? null,
         id: account.id,
         temporaryPassword,
         username: account.username,
@@ -858,6 +1188,7 @@ export class NotesDataStore {
 
       return {
         createdAt: account.createdAt,
+        email: account.email ?? null,
         id: account.id,
         username: account.username,
       };
@@ -992,7 +1323,7 @@ function base64UrlEncode(value: string | Buffer): string {
   return Buffer.from(value).toString("base64url");
 }
 
-function getSessionSecret(): string {
+export function getSessionSecret(): string {
   const configuredSecret = process.env.SESSION_SECRET?.trim();
 
   if (configuredSecret) {

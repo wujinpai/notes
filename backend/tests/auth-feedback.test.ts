@@ -148,6 +148,28 @@ async function postJson(
   });
 }
 
+async function waitForEmailCode(
+  getStdout: () => string,
+  email: string,
+): Promise<string> {
+  const deadline = Date.now() + 10_000;
+  const escapedEmail = email.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = new RegExp(`邮箱 ${escapedEmail} 的验证码为 (\\d{6})`);
+
+  while (Date.now() < deadline) {
+    const matches = [...getStdout().matchAll(new RegExp(pattern, "g"))];
+    const match = matches[matches.length - 1];
+
+    if (match) {
+      return match[1];
+    }
+
+    await delay(50);
+  }
+
+  throw new Error(`等待邮箱 ${email} 的验证码日志超时`);
+}
+
 async function getCaptchaToken(baseUrl: string): Promise<string> {
   const challengeResponse = await fetch(`${baseUrl}/api/auth/slider-challenge`, {
     method: "POST",
@@ -1184,8 +1206,19 @@ test("访客自助注册需要滑块验证，注册后可改密并用新密码�
     });
     assert.equal(registerWithoutCaptcha.status, 400);
 
+    const visitorEmail = "new-visitor@example.com";
+    const sendCodeResponse = await postJson(baseUrl, "/api/auth/email-code", {
+      captchaToken: await getCaptchaToken(baseUrl),
+      email: visitorEmail,
+      purpose: "register",
+    });
+    assert.equal(sendCodeResponse.status, 200);
+    const visitorEmailCode = await waitForEmailCode(() => stdout, visitorEmail);
+
     const registerResponse = await postJson(baseUrl, "/api/auth/register", {
       captchaToken: await getCaptchaToken(baseUrl),
+      email: visitorEmail,
+      emailCode: visitorEmailCode,
       password: "register-password-2026",
       username: "new-visitor",
     });
@@ -1211,6 +1244,8 @@ test("访客自助注册需要滑块验证，注册后可改密并用新密码�
 
     const duplicateRegister = await postJson(baseUrl, "/api/auth/register", {
       captchaToken: await getCaptchaToken(baseUrl),
+      email: visitorEmail,
+      emailCode: visitorEmailCode,
       password: "register-password-2026",
       username: "NEW-VISITOR",
     });
@@ -1399,6 +1434,7 @@ test("超级管理员删除普通用户后账号、会话与云端工作区一�
     assert.deepEqual(await deleteResponse.json(), {
       user: {
         createdAt: createdTarget.user.createdAt,
+        email: null,
         id: createdTarget.user.id,
         username: "delete-target",
       },

@@ -1,6 +1,6 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import type { AuthUser } from "../lib/auth.js";
-import { registerUser } from "../lib/auth.js";
+import { registerUser, sendEmailCode } from "../lib/auth.js";
 import { SliderCaptcha } from "./SliderCaptcha.js";
 
 interface LoginDialogProps {
@@ -27,6 +27,11 @@ export function LoginDialog({
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [email, setEmail] = useState("");
+  const [emailCode, setEmailCode] = useState("");
+  const [isSendingCode, setIsSendingCode] = useState(false);
+  const [codeCountdown, setCodeCountdown] = useState(0);
+  const [codeNotice, setCodeNotice] = useState("");
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [remember, setRemember] = useState(true);
   const [captchaToken, setCaptchaToken] = useState("");
@@ -41,11 +46,57 @@ export function LoginDialog({
     setCaptchaResetKey((value) => value + 1);
   }
 
+  useEffect(() => {
+    if (codeCountdown <= 0) {
+      return;
+    }
+
+    const timer = globalThis.setTimeout(
+      () => setCodeCountdown((value) => Math.max(0, value - 1)),
+      1000,
+    );
+    return () => globalThis.clearTimeout(timer);
+  }, [codeCountdown]);
+
   function switchMode(nextMode: LoginMode) {
     setMode(nextMode);
     setError("");
     setConfirmPassword("");
+    setEmailCode("");
+    setCodeNotice("");
     resetCaptcha();
+  }
+
+  async function handleRequestCode() {
+    if (isSendingCode || codeCountdown > 0) {
+      return;
+    }
+
+    if (!email.trim()) {
+      setError("请先填写邮箱。");
+      return;
+    }
+
+    if (!captchaToken) {
+      setError("请先完成滑块验证，再获取验证码。");
+      return;
+    }
+
+    try {
+      setIsSendingCode(true);
+      setError("");
+      await sendEmailCode({ captchaToken, email, purpose: "register" });
+      setCodeNotice("验证码已发送，请查收邮箱（10 分钟内有效）。");
+      setCodeCountdown(60);
+    } catch (sendError) {
+      setError(
+        sendError instanceof Error ? sendError.message : "验证码发送失败。",
+      );
+    } finally {
+      setIsSendingCode(false);
+      // 滑块票据已被服务端单次消费，获取验证码后提交前需重新完成滑块验证。
+      resetCaptcha();
+    }
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -67,13 +118,25 @@ export function LoginDialog({
         resetCaptcha();
         return;
       }
+
+      if (!email.trim()) {
+        setError("请填写邮箱。");
+        resetCaptcha();
+        return;
+      }
+
+      if (!/^\d{6}$/.test(emailCode.trim())) {
+        setError("请输入 6 位邮箱验证码。");
+        resetCaptcha();
+        return;
+      }
     }
 
     try {
       setIsSubmitting(true);
       setError("");
       const user = isRegisterMode
-        ? await registerUser(username, password, captchaToken)
+        ? await registerUser(username, password, captchaToken, email, emailCode)
         : await login(username, password, remember, captchaToken);
       await onAuthenticated(user);
     } catch (loginError) {
@@ -211,6 +274,64 @@ export function LoginDialog({
             </label>
           ) : null}
 
+          {isRegisterMode ? (
+            <>
+              <label>
+                <span className="visually-hidden">邮箱</span>
+                <input
+                  type="email"
+                  name="email"
+                  autoComplete="email"
+                  placeholder="邮箱（用于接收验证码）"
+                  value={email}
+                  required
+                  maxLength={254}
+                  onChange={(event) => setEmail(event.target.value)}
+                />
+              </label>
+              <div className="login-dialog-code-row">
+                <label>
+                  <span className="visually-hidden">邮箱验证码</span>
+                  <input
+                    type="text"
+                    name="emailCode"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    placeholder="邮箱验证码"
+                    value={emailCode}
+                    required
+                    maxLength={6}
+                    onChange={(event) =>
+                      setEmailCode(event.target.value.replace(/\D/g, ""))
+                    }
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="login-dialog-code-button"
+                  disabled={
+                    !captchaToken ||
+                    isSendingCode ||
+                    codeCountdown > 0 ||
+                    !email.trim()
+                  }
+                  onClick={() => void handleRequestCode()}
+                >
+                  {isSendingCode
+                    ? "发送中..."
+                    : codeCountdown > 0
+                      ? `${codeCountdown} 秒后重发`
+                      : "获取验证码"}
+                </button>
+              </div>
+              {codeNotice ? (
+                <p className="login-dialog-code-notice" role="status">
+                  {codeNotice}
+                </p>
+              ) : null}
+            </>
+          ) : null}
+
           <SliderCaptcha
             resetKey={captchaResetKey}
             onVerified={(token) => setCaptchaToken(token)}
@@ -241,7 +362,8 @@ export function LoginDialog({
               !captchaToken ||
               !username.trim() ||
               !password ||
-              (isRegisterMode && !confirmPassword)
+              (isRegisterMode &&
+                (!confirmPassword || !email.trim() || emailCode.length !== 6))
             }
           >
             {isSubmitting

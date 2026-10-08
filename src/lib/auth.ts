@@ -16,8 +16,33 @@ export function canUseCloudWorkspace(
 
 export interface AccountSummary {
   createdAt: number;
+  email: string | null;
   id: string;
   username: string;
+}
+
+export type EmailCodePurpose = "bind" | "register";
+
+export interface SmtpSettings {
+  enabled: boolean;
+  from: string;
+  fromName: string;
+  hasPass: boolean;
+  host: string;
+  port: number;
+  secure: boolean;
+  user: string;
+}
+
+export interface SmtpSettingsInput {
+  enabled: boolean;
+  from: string;
+  fromName: string;
+  host: string;
+  pass?: string;
+  port: number;
+  secure: boolean;
+  user: string;
 }
 
 export interface CreatedAccount extends AccountSummary {
@@ -115,6 +140,8 @@ export async function registerUser(
   username: string,
   password: string,
   captchaToken: string,
+  email: string,
+  emailCode: string,
 ): Promise<AuthUser> {
   const result = await requestJson<{ user: AuthUser }>(
     "/api/auth/register",
@@ -123,11 +150,57 @@ export async function registerUser(
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ captchaToken, password, username }),
+      body: JSON.stringify({ captchaToken, email, emailCode, password, username }),
     },
     "注册服务暂不可用，请确认后端服务已启动并部署了最新版本。",
   );
   return result.user;
+}
+
+export async function sendEmailCode(input: {
+  captchaToken: string;
+  email: string;
+  purpose: EmailCodePurpose;
+}): Promise<void> {
+  await requestJson<{ ok: true }>(
+    "/api/auth/email-code",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(input),
+    },
+    "验证码发送失败，请稍后重试。",
+  );
+}
+
+export async function getOwnEmail(): Promise<string | null> {
+  const result = await requestJson<{ email: string | null }>(
+    "/api/auth/email",
+    undefined,
+    "读取绑定邮箱失败。",
+  );
+  return result.email;
+}
+
+export async function bindOwnEmail(input: {
+  currentPassword: string;
+  email: string;
+  emailCode: string;
+}): Promise<string> {
+  const result = await requestJson<{ email: string }>(
+    "/api/auth/email/bind",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(input),
+    },
+    "绑定邮箱失败，请稍后重试。",
+  );
+  return result.email;
 }
 
 async function loginAt(
@@ -322,4 +395,42 @@ export async function deleteManagedUser(
     "删除用户失败。",
   );
   return result.user;
+}
+
+export async function getSmtpSettings(): Promise<SmtpSettings> {
+  return requestJson<SmtpSettings>(
+    "/api/superadmin/smtp-settings",
+    undefined,
+    "读取邮箱设置失败。",
+  );
+}
+
+export async function saveSmtpSettings(
+  input: SmtpSettingsInput,
+): Promise<SmtpSettings> {
+  return requestJson<SmtpSettings>(
+    "/api/superadmin/smtp-settings",
+    {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(input),
+    },
+    "保存邮箱设置失败。",
+  );
+}
+
+export async function sendSmtpTestMail(to: string): Promise<{ to: string }> {
+  return requestJson<{ ok: true; to: string }>(
+    "/api/superadmin/smtp-settings/test",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ to }),
+    },
+    "测试邮件发送失败。",
+  );
 }

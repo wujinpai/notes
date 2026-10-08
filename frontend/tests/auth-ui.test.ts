@@ -58,7 +58,10 @@ test("登录弹窗源码提供自助注册模式与滑块验证接入", () => {
   assert.match(loginSource, /两次输入的密码不一致/);
   assert.match(loginSource, /<SliderCaptcha/);
   assert.match(loginSource, /!captchaToken/);
-  assert.match(loginSource, /registerUser\(username, password, captchaToken\)/);
+  assert.match(
+    loginSource,
+    /registerUser\(username, password, captchaToken, email, emailCode\)/,
+  );
   assert.match(sliderSource, /createSliderChallenge/);
   assert.match(sliderSource, /verifySliderCaptcha/);
   assert.match(sliderSource, /onPointerDown/);

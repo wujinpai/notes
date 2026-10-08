@@ -8,6 +8,7 @@ import {
 } from "react";
 import { CategorySidebar } from "./components/CategorySidebar";
 import { AiReviewDialog } from "./components/AiReviewDialog";
+import { BindEmailDialog } from "./components/BindEmailDialog";
 import { ChangePasswordDialog } from "./components/ChangePasswordDialog";
 import { ConfirmDialog } from "./components/ConfirmDialog";
 import { EditorPanel, type EditorPanelHandle } from "./components/EditorPanel";
@@ -50,6 +51,7 @@ import {
   getHermesSkillInstallLink,
   getAuthSession,
   getCloudWorkspace,
+  getOwnEmail,
   loginUser,
   logoutUser,
   resetHermesSkillInstallLink,
@@ -254,6 +256,33 @@ export default function App() {
   const [cloudSyncError, setCloudSyncError] = useState("");
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
+  const [isBindEmailOpen, setIsBindEmailOpen] = useState(false);
+  const [currentEmail, setCurrentEmail] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (authUser?.role !== "user") {
+      setCurrentEmail(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    void getOwnEmail()
+      .then((email) => {
+        if (!cancelled) {
+          setCurrentEmail(email);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setCurrentEmail(null);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authUser?.id, authUser?.role]);
   const [isHermesSkillDownloading, setIsHermesSkillDownloading] =
     useState(false);
   const [
@@ -1766,6 +1795,7 @@ export default function App() {
     <SettingsPanel
       aiAvailable={aiAvailable}
       aiEnabled={aiEnabled}
+      authEmail={currentEmail}
       authUsername={authUser?.username}
       canChangePassword={authUser?.role === "user"}
       canConfigureWechat={Boolean(authUser)}
@@ -1790,6 +1820,10 @@ export default function App() {
       workspaceArchiveError={workspaceArchiveError}
       workspaceArchiveProgress={workspaceArchiveProgress}
       onAiEnabledChange={setAiEnabled}
+      onBindEmail={() => {
+        setIsSettingsOpen(false);
+        setIsBindEmailOpen(true);
+      }}
       onChangePassword={() => {
         setIsSettingsOpen(false);
         setIsChangePasswordOpen(true);
@@ -2427,6 +2461,14 @@ export default function App() {
         <ChangePasswordDialog
           changePassword={changeUserPassword}
           onClose={() => setIsChangePasswordOpen(false)}
+        />
+      ) : null}
+
+      {isBindEmailOpen ? (
+        <BindEmailDialog
+          currentEmail={currentEmail}
+          onBound={(email) => setCurrentEmail(email)}
+          onClose={() => setIsBindEmailOpen(false)}
         />
       ) : null}
 

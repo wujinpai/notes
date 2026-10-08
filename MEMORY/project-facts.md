@@ -2681,3 +2681,23 @@
 - 上线后用合成 Markdown 和线上组件通过微信官方草稿接口新增并回读临时草稿：
   提交前 5 个空行段落，微信保存后仍为 5 个；临时草稿已删除。此验证覆盖微信 API
   保存结果，但微信网页编辑器的视觉显示因已登录页面访问被自动审批拒绝，尚未验收。
+
+## 2026-10-08 邮箱验证、绑定与超管 SMTP 设置（未发布）
+
+- 注册新增邮箱验证：`POST /api/auth/email-code`（purpose register/bind）发 6 位码，
+  10 分钟有效、60 秒重发间隔（成功消费后清除同邮箱同用途码，可立即再发）；
+  发码需同源 + 滑块一次性票据。注册 body 新增 email/emailCode，邮箱全站唯一。
+- 账号记录新增可空 `email`/`normalizedEmail`（旧数据缺字段按未绑定解析，无迁移）；
+  `notes-data.json` 新增 `emailCodes`、`smtpSettings` 顶层记录，均有容错解析。
+  删除用户时账号行移除即释放邮箱绑定，无额外级联。
+- 绑定/换绑：`GET /api/auth/email`、`POST /api/auth/email/bind`（当前密码 + 新邮箱
+  验证码 purpose=bind）；邮箱仅本人与超管（用户列表列）可见。
+- 发信 `server/mail.ts`（nodemailer）：后台配置（启用优先，AES-256-GCM 加密密码，
+  密钥 scrypt(SESSION_SECRET, "notes-smtp-settings")）→ env SMTP_*/SMTP_FROM_NAME
+  → 日志 `[email-code]` 打印。超管接口 `/api/superadmin/smtp-settings` GET/PUT/POST
+  test，仅回 hasPass，PUT 密码留空不改，失败错误脱敏截断 300 字。
+- 前端：LoginDialog 注册模式加邮箱+验证码（发码消耗滑块票据后重置滑块、60 秒
+  倒计时）；新增 BindEmailDialog（账号设置「绑定/更换邮箱」行，展示当前绑定邮箱）；
+  SuperAdminPage 加「邮箱设置」页签与用户表「绑定邮箱」列。
+- 基线变化：typecheck 全过；frontend 139→143、backend 19→21（新增 email-feedback
+  两项真实 HTTP 测试）；既有注册反馈测试改为日志取码新流程。

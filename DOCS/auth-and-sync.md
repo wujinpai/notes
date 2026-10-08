@@ -82,6 +82,30 @@ Secret 注入，并为 `SESSION_SECRET` 配置独立的高熵随机值。未配�
   `passwordVersion` 与 `skillTokenVersion` 一起递增，使此前下载或生成的 Skill
   Token 立即失效。
 
+## 邮箱验证与 SMTP 发信
+
+- 自助注册除用户名、密码与滑块验证外，还必须填写邮箱并输入 6 位邮箱验证码：
+  验证码 10 分钟内有效，同一邮箱 60 秒内只能发送一次（成功消费后可立即再发），
+  邮箱全站唯一（大小写不敏感）；发送验证码同样需要先完成一次滑块验证，票据
+  一次性消费，防止滥发。接口：`POST /api/auth/email-code`（purpose=register）
+  与 `POST /api/auth/register`（带 email、emailCode）。
+- 已登录普通用户在「设置 → 账号与同步」可绑定（未绑定时）或更换邮箱：需要
+  当前登录密码 + 新邮箱验证码（purpose=bind，同一套发码/校验），接口为
+  `GET /api/auth/email` 与 `POST /api/auth/email/bind`。更换后旧邮箱立即释放，
+  可被新账号注册使用；删除用户时邮箱随账号记录一并移除。管理员创建的无邮箱
+  老账号照常登录，不强制补绑。绑定邮箱只对用户本人（设置页）与超级管理员
+  （用户列表）可见，不出现在公开便签等其他接口中。账号记录新增可空字段
+  `email` / `normalizedEmail`，旧数据缺失时按未绑定兼容读取，无需迁移。
+- 发信走 `server/mail.ts`（nodemailer）。配置优先级：超级管理员后台「邮箱设置」
+  （启用且主机/账号齐全）→ 环境变量 `SMTP_HOST` / `SMTP_PORT` / `SMTP_SECURE` /
+  `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` / `SMTP_FROM_NAME` → 都没有时把验证码
+  以 `[email-code] ...` 形式打印到服务端日志，接口行为不变。
+- 超管接口：`GET/PUT /api/superadmin/smtp-settings`、`POST /api/superadmin/smtp-settings/test`
+  （仅超管会话）。设置保存在 `notes-data.json` 的 `smtpSettings` 中，密码以
+  SESSION_SECRET 派生密钥（scrypt）AES-256-GCM 加密存储；GET 只返回 `hasPass`
+  不回明文，PUT 密码留空表示不修改；保存后即时生效。测试邮件默认发到发件邮箱，
+  可指定任意收件邮箱，失败返回脱敏（隐藏密码）后的中文错误。
+
 ## Skill Token 与 Hermes 下载
 
 设置浮窗的“工具与扩展”类别提供 Hermes Skill：匿名用户看到登录引导，登录用户

@@ -1018,22 +1018,77 @@ test("管理员可使用便签服务、创建用户且各账号云工作区严�
       },
     });
 
-    const wrongCurrentPassword = await postJson(
+    // alice 是管理员创建的无邮箱账号：未绑邮箱时改密先提示去绑定。
+    const changeBeforeBind = await postJson(
       baseUrl,
       "/api/auth/password",
       {
-        currentPassword: "not-alice-password",
+        emailCode: "123456",
         newPassword: "alice-new-password-2026",
       },
       aliceCookie,
     );
-    assert.equal(wrongCurrentPassword.status, 400);
+    assert.equal(changeBeforeBind.status, 400);
+    assert.match(
+      ((await changeBeforeBind.json()) as { error: string }).error,
+      /请先绑定邮箱/,
+    );
+
+    const aliceEmail = "alice@example.com";
+    const sendBindCode = await postJson(
+      baseUrl,
+      "/api/auth/email-code",
+      {
+        captchaToken: await getCaptchaToken(baseUrl),
+        email: aliceEmail,
+        purpose: "bind",
+      },
+      aliceCookie,
+    );
+    assert.equal(sendBindCode.status, 200);
+    const aliceBindCode = await waitForEmailCode(() => stdout, aliceEmail);
+
+    const bindAliceEmail = await postJson(
+      baseUrl,
+      "/api/auth/email/bind",
+      {
+        currentPassword: alice.initialPassword,
+        email: aliceEmail,
+        emailCode: aliceBindCode,
+      },
+      aliceCookie,
+    );
+    assert.equal(bindAliceEmail.status, 200);
+
+    const wrongEmailCode = await postJson(
+      baseUrl,
+      "/api/auth/password",
+      {
+        emailCode: "000000",
+        newPassword: "alice-new-password-2026",
+      },
+      aliceCookie,
+    );
+    assert.equal(wrongEmailCode.status, 400);
+
+    const sendResetCode = await postJson(
+      baseUrl,
+      "/api/auth/email-code",
+      {
+        captchaToken: await getCaptchaToken(baseUrl),
+        email: aliceEmail,
+        purpose: "reset",
+      },
+      aliceCookie,
+    );
+    assert.equal(sendResetCode.status, 200);
+    const aliceResetCode = await waitForEmailCode(() => stdout, aliceEmail);
 
     const weakNewPassword = await postJson(
       baseUrl,
       "/api/auth/password",
       {
-        currentPassword: alice.initialPassword,
+        emailCode: aliceResetCode,
         newPassword: "short",
       },
       aliceCookie,
@@ -1045,7 +1100,7 @@ test("管理员可使用便签服务、创建用户且各账号云工作区严�
       baseUrl,
       "/api/auth/password",
       {
-        currentPassword: alice.initialPassword,
+        emailCode: aliceResetCode,
         newPassword: aliceChangedPassword,
       },
       aliceCookie,
@@ -1258,11 +1313,24 @@ test("访客自助注册需要滑块验证，注册后可改密并用新密码�
     });
     assert.equal(loginWithoutCaptcha.status, 400);
 
+    const sendResetCodeResponse = await postJson(
+      baseUrl,
+      "/api/auth/email-code",
+      {
+        captchaToken: await getCaptchaToken(baseUrl),
+        email: visitorEmail,
+        purpose: "reset",
+      },
+      registeredCookie,
+    );
+    assert.equal(sendResetCodeResponse.status, 200);
+    const resetEmailCode = await waitForEmailCode(() => stdout, visitorEmail);
+
     const changePasswordResponse = await postJson(
       baseUrl,
       "/api/auth/password",
       {
-        currentPassword: "register-password-2026",
+        emailCode: resetEmailCode,
         newPassword: "register-new-password-2026",
       },
       registeredCookie,

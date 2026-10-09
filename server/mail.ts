@@ -5,7 +5,11 @@ import {
   scryptSync,
 } from "node:crypto";
 import nodemailer, { type Transporter } from "nodemailer";
-import { getSessionSecret, type SmtpSettingsRecord } from "./auth.js";
+import {
+  getSessionSecret,
+  type EmailCodePurpose,
+  type SmtpSettingsRecord,
+} from "./auth.js";
 
 /* ---------- SMTP 密码加密存储 ----------
    用 SESSION_SECRET 派生密钥做 AES-256-GCM；接口绝不回显密码明文。 */
@@ -162,19 +166,27 @@ export function logEmailCode(email: string, code: string): void {
   );
 }
 
+const CODE_MAIL_INTROS: Record<EmailCodePurpose, string> = {
+  bind: "您正在绑定或更换邮箱",
+  register: "您正在注册账号",
+  reset: "您正在重置登录密码",
+};
+
 export async function sendVerificationCodeMail(
   cfg: SmtpConfig,
   to: string,
   code: string,
+  purpose: EmailCodePurpose = "register",
 ): Promise<void> {
   const brand = mailBrand(cfg);
+  const intro = CODE_MAIL_INTROS[purpose];
   try {
     await transporterFor(cfg).sendMail({
       from: formatFrom(cfg),
       to,
       subject: `${brand} · 验证码`,
-      text: `您的验证码是 ${code}，10 分钟内有效。如非本人操作请忽略。`,
-      html: codeMailHtml(code, brand),
+      text: `${intro}，您的验证码是 ${code}，10 分钟内有效。如非本人操作请忽略。`,
+      html: codeMailHtml(code, brand, intro),
     });
   } catch (err) {
     throw new Error(sanitizeMailError(err, cfg.pass));
@@ -195,7 +207,7 @@ export async function sendTestMail(cfg: SmtpConfig, to: string): Promise<void> {
 }
 
 /** 验证码邮件 HTML 模板：简单干净，验证码大号居中；同时带 text 兜底 */
-function codeMailHtml(code: string, brand: string): string {
+function codeMailHtml(code: string, brand: string, intro: string): string {
   const brandHtml = brand
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -206,7 +218,7 @@ function codeMailHtml(code: string, brand: string): string {
   <div style="max-width:440px;margin:0 auto;background:#ffffff;border-radius:12px;padding:32px 28px;border-top:4px solid #1a73e8;">
     <div style="font-size:15px;color:#1a73e8;font-weight:600;letter-spacing:1px;">${brandHtml}</div>
     <h1 style="font-size:20px;color:#202124;margin:14px 0 10px;">邮箱验证码</h1>
-    <p style="font-size:14px;color:#5f6368;line-height:1.7;margin:0;">您正在注册或绑定邮箱，本次验证码为：</p>
+    <p style="font-size:14px;color:#5f6368;line-height:1.7;margin:0;">${intro}，本次验证码为：</p>
     <div style="text-align:center;font-size:36px;font-weight:700;letter-spacing:8px;color:#202124;margin:24px 0;">${code}</div>
     <p style="font-size:13px;color:#5f6368;line-height:1.7;margin:0;">验证码 <strong>10 分钟</strong>内有效，请尽快完成验证。</p>
     <p style="font-size:12px;color:#80868b;line-height:1.7;margin:18px 0 0;">如非本人操作，请忽略本邮件，账号不会有任何变更。</p>

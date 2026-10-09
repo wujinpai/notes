@@ -2701,3 +2701,26 @@
   SuperAdminPage 加「邮箱设置」页签与用户表「绑定邮箱」列。
 - 基线变化：typecheck 全过；frontend 139→143、backend 19→21（新增 email-feedback
   两项真实 HTTP 测试）；既有注册反馈测试改为日志取码新流程。
+
+## 2026-10-09：找回密码与改密改用邮箱验证码（未发布）
+
+- 邮箱验证码 purpose 新增 `reset`，找回密码（登录页）与设置内改密共用，
+  与 register/bind 隔离不可串用。`EmailCodePurpose` 与 `parseDatabase` 同步放行，
+  旧数据无需迁移。验证码邮件文案按 purpose 区分（注册/绑定/重置登录密码）。
+- 登录页找回：登录弹窗新增「忘记密码？」模式（邮箱 → 滑块发码 → 验证码 + 新
+  密码 + 确认），`POST /api/auth/reset-password` 提交同样消费滑块票据。邮箱未
+  绑定任何账号时发码返回与成功相同的 `{ ok: true }` 且不生成码、不发信；重置
+  接口对未知邮箱与错码统一报「邮箱验证码错误或已过期」。超级管理员为 `.env`
+  账号、不在 users 表，不走邮箱找回。
+- 设置改密：`POST /api/auth/password` 改为登录态 + 邮箱验证码 + 新密码，不再
+  校验当前密码（原密码也可能忘）；未绑邮箱抛 `EmailNotBoundError`，前端
+  ChangePasswordDialog 在无绑定邮箱时提示并一键跳去绑定弹窗。改密后递增
+  passwordVersion + skillTokenVersion、撤销 Hermes 安装链接、续签当前会话
+  Cookie，其他会话全失效；找回重置同样递增双版本并撤销安装链接（无当前会话
+  可保留）。旧 `NotesDataStore.changePassword`（原密码校验）已删除，三条既有
+  后端反馈（管理员隔离、访客注册、Skill Token）改走绑邮箱 + reset 码新流程。
+- 验证：typecheck 全过；frontend 143→144（改密弹窗断言改为验证码语义，新增
+  忘记密码源码断言）、backend 21→23（email-feedback 新增找回、改密两项真实
+  HTTP 测试，含统一响应、purpose 串用、重放、双会话失效、未绑邮箱提示）；
+  假 SMTP 捕获的真实 HTTP E2E 25 项断言通过（注册/找回/改密三封邮件文案、
+  会话失效矩阵、未知邮箱不发信、超管登录不受影响）。

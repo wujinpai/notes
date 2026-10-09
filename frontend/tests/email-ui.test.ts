@@ -15,7 +15,7 @@ test("注册模式提供邮箱验证码字段且发码走滑块票据", () => {
   assert.match(loginSource, /获取验证码/);
   assert.match(
     loginSource,
-    /sendEmailCode\(\{ captchaToken, email, purpose: "register" \}\)/,
+    /purpose: isForgotMode \? "reset" : "register"/,
   );
   assert.match(loginSource, /请输入 6 位邮箱验证码/);
   assert.match(
@@ -24,6 +24,23 @@ test("注册模式提供邮箱验证码字段且发码走滑块票据", () => {
   );
   assert.match(authSource, /"\/api\/auth\/email-code"/);
   assert.match(authSource, /"\/api\/auth\/register"/);
+});
+
+test("登录弹窗提供忘记密码入口并通过邮箱验证码重置", () => {
+  const loginSource = readFileSync("src/components/LoginDialog.tsx", "utf8");
+  const authSource = readFileSync("src/lib/auth.ts", "utf8");
+
+  assert.match(loginSource, /忘记密码？/);
+  assert.match(loginSource, /switchMode\("forgot"\)/);
+  assert.match(loginSource, /账号绑定的邮箱/);
+  assert.match(
+    loginSource,
+    /resetUserPassword\(email, emailCode, password, captchaToken\)/,
+  );
+  assert.match(loginSource, /密码已重置，请用新密码登录。/);
+  assert.match(loginSource, /重置密码/);
+  assert.match(authSource, /"\/api\/auth\/reset-password"/);
+  assert.match(authSource, /"reset"/);
 });
 
 test("绑定邮箱弹窗要求当前密码、新邮箱与验证码", () => {

@@ -55,6 +55,7 @@ import {
   DuplicateEmailError,
   DuplicateUsernameError,
   EmailCodeTooFrequentError,
+  EmailNotBoundError,
   getShanghaiDateKey,
   InvalidCurrentPasswordError,
   InvalidEmailCodeError,
@@ -191,7 +192,14 @@ interface CreateUserRequestBody {
 }
 
 interface ChangePasswordRequestBody {
-  currentPassword?: string;
+  emailCode?: string;
+  newPassword?: string;
+}
+
+interface ResetPasswordRequestBody {
+  captchaToken?: string;
+  email?: string;
+  emailCode?: string;
   newPassword?: string;
 }
 
@@ -4255,7 +4263,7 @@ app.post(
 
     const purpose = request.body?.purpose;
 
-    if (purpose !== "register" && purpose !== "bind") {
+    if (purpose !== "register" && purpose !== "bind" && purpose !== "reset") {
       response.status(400).json({ error: "验证码用途无效。" });
       return;
     }
@@ -4294,6 +4302,13 @@ app.post(
       return;
     }
 
+    if (purpose === "reset" && !(await notesDataStore.isEmailTaken(email))) {
+      // 找回密码对未绑定任何账号的邮箱返回与成功完全相同的响应，
+      // 不生成验证码、不发信，避免泄漏邮箱是否已注册。
+      response.json({ ok: true });
+      return;
+    }
+
     try {
       const code = await notesDataStore.prepareEmailCode(
         email,
@@ -4303,7 +4318,7 @@ app.post(
 
       if (smtp) {
         try {
-          await sendVerificationCodeMail(smtp, email, code);
+          await sendVerificationCodeMail(smtp, email, code, purpose as EmailCodePurpose);
         } catch (error) {
           response.status(502).json({
             error: `验证码发送失败：${error instanceof Error ? error.message : "发送失败"}`,
@@ -4652,22 +4667,18 @@ app.post(
       return;
     }
 
-    const currentPassword = request.body?.currentPassword;
+    const emailCode = request.body?.emailCode?.trim();
     const newPassword = request.body?.newPassword;
 
-    if (
-      typeof currentPassword !== "string" ||
-      !currentPassword ||
-      typeof newPassword !== "string"
-    ) {
-      response.status(400).json({ error: "请输入当前密码和新密码。" });
+    if (!emailCode || typeof newPassword !== "string" || !newPassword) {
+      response.status(400).json({ error: "请输入邮箱验证码和新密码。" });
       return;
     }
 
     try {
-      const passwordVersion = await notesDataStore.changePassword(
+      const passwordVersion = await notesDataStore.changePasswordByEmailCode(
         session.id,
-        currentPassword,
+        emailCode,
         newPassword,
       );
       const user = getPublicAuthUser(session);
@@ -4682,14 +4693,63 @@ app.post(
       response.json({ ok: true });
     } catch (error) {
       const status =
-        error instanceof InvalidCurrentPasswordError ||
-        error instanceof InvalidNewPasswordError
+        error instanceof InvalidEmailCodeError ||
+        error instanceof InvalidNewPasswordError ||
+        error instanceof EmailNotBoundError
           ? 400
           : error instanceof AccountNotFoundError
             ? 404
             : 500;
       response.status(status).json({
         error: error instanceof Error ? error.message : "修改密码失败。",
+      });
+    }
+  },
+);
+
+app.post(
+  "/api/auth/reset-password",
+  async (
+    request: Request<Record<string, never>, unknown, ResetPasswordRequestBody>,
+    response: Response,
+  ) => {
+    const email = request.body?.email?.trim();
+    const emailCode = request.body?.emailCode?.trim();
+    const newPassword = request.body?.newPassword;
+
+    if (
+      !email ||
+      !emailCode ||
+      typeof newPassword !== "string" ||
+      !newPassword
+    ) {
+      response
+        .status(400)
+        .json({ error: "请输入邮箱、邮箱验证码与新密码。" });
+      return;
+    }
+
+    if (!requireCaptchaToken(request.body?.captchaToken, response)) {
+      return;
+    }
+
+    try {
+      const result = await notesDataStore.resetPasswordByEmailCode(
+        email,
+        emailCode,
+        newPassword,
+      );
+      await notesDataStore.revokeHermesInstallLink(result.id);
+      response.json({ ok: true });
+    } catch (error) {
+      const status =
+        error instanceof InvalidEmailCodeError ||
+        error instanceof InvalidNewPasswordError ||
+        error instanceof InvalidEmailError
+          ? 400
+          : 500;
+      response.status(status).json({
+        error: error instanceof Error ? error.message : "重置密码失败。",
       });
     }
   },

@@ -21,7 +21,7 @@ export interface AccountSummary {
   username: string;
 }
 
-export type EmailCodePurpose = "bind" | "register";
+export type EmailCodePurpose = "bind" | "register" | "reset";
 
 export interface SmtpSettings {
   enabled: boolean;
@@ -253,7 +253,7 @@ export async function logoutUser(): Promise<void> {
 }
 
 export async function changeUserPassword(
-  currentPassword: string,
+  emailCode: string,
   newPassword: string,
 ): Promise<void> {
   await requestJson<{ ok: true }>(
@@ -263,9 +263,28 @@ export async function changeUserPassword(
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ currentPassword, newPassword }),
+      body: JSON.stringify({ emailCode, newPassword }),
     },
     "修改密码失败。",
+  );
+}
+
+export async function resetUserPassword(
+  email: string,
+  emailCode: string,
+  newPassword: string,
+  captchaToken: string,
+): Promise<void> {
+  await requestJson<{ ok: true }>(
+    "/api/auth/reset-password",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ captchaToken, email, emailCode, newPassword }),
+    },
+    "重置密码失败，请稍后重试。",
   );
 }
 

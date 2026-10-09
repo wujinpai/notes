@@ -87,7 +87,7 @@ interface StoredAccount extends AccountSummary {
   skillTokenVersion: number;
 }
 
-export type EmailCodePurpose = "bind" | "register";
+export type EmailCodePurpose = "bind" | "register" | "reset";
 
 export interface StoredEmailCode {
   code: string;
@@ -232,6 +232,13 @@ export class InvalidEmailCodeError extends Error {
   constructor() {
     super("邮箱验证码错误或已过期，请重新获取。");
     this.name = "InvalidEmailCodeError";
+  }
+}
+
+export class EmailNotBoundError extends Error {
+  constructor() {
+    super("请先绑定邮箱，再通过邮箱验证码修改密码。");
+    this.name = "EmailNotBoundError";
   }
 }
 
@@ -585,7 +592,9 @@ function parseDatabase(value: unknown): AuthDatabase {
           code.code &&
           typeof code.email === "string" &&
           code.email &&
-          (code.purpose === "bind" || code.purpose === "register") &&
+          (code.purpose === "bind" ||
+            code.purpose === "register" ||
+            code.purpose === "reset") &&
           typeof code.createdAt === "number" &&
           Number.isFinite(code.createdAt) &&
           typeof code.expiresAt === "number" &&
@@ -1098,9 +1107,41 @@ export class NotesDataStore {
     return current && safeStringEqual(current, ticket) ? ownerId : null;
   }
 
-  async changePassword(
+  private async applyEmailCodePasswordReset(
+    database: AuthDatabase,
+    account: StoredAccount,
+    emailCode: string,
+    validatedPassword: string,
+  ): Promise<number> {
+    if (!account.normalizedEmail) {
+      throw new EmailNotBoundError();
+    }
+
+    if (
+      await verifyPassword(
+        validatedPassword,
+        account.passwordSalt,
+        account.passwordHash,
+      )
+    ) {
+      throw new InvalidNewPasswordError("新密码不能与当前密码相同。");
+    }
+
+    consumeEmailCode(database, account.normalizedEmail, emailCode, "reset");
+
+    const password = await hashPassword(validatedPassword);
+    account.passwordHash = password.hash;
+    account.passwordSalt = password.salt;
+    account.passwordVersion += 1;
+    account.skillTokenVersion += 1;
+    await this.writeDatabase(database);
+    return account.passwordVersion;
+  }
+
+  /** 设置内改密：已登录用户凭发送到本人绑定邮箱的 reset 验证码设置新密码 */
+  async changePasswordByEmailCode(
     userId: string,
-    currentPassword: string,
+    emailCode: string,
     newPassword: string,
   ): Promise<number> {
     return this.runExclusive(async () => {
@@ -1112,33 +1153,43 @@ export class NotesDataStore {
         throw new AccountNotFoundError();
       }
 
-      if (
-        !(await verifyPassword(
-          currentPassword,
-          account.passwordSalt,
-          account.passwordHash,
-        ))
-      ) {
-        throw new InvalidCurrentPasswordError();
+      return this.applyEmailCodePasswordReset(
+        database,
+        account,
+        emailCode,
+        validatedPassword,
+      );
+    });
+  }
+
+  /**
+   * 登录页找回密码：凭发送到账号绑定邮箱的 reset 验证码重置密码。
+   * 邮箱未绑定任何账号时与验证码错误返回同一错误，不泄漏账号是否存在。
+   */
+  async resetPasswordByEmailCode(
+    email: string,
+    emailCode: string,
+    newPassword: string,
+  ): Promise<{ id: string; passwordVersion: number }> {
+    return this.runExclusive(async () => {
+      const validatedPassword = validateNewPassword(newPassword);
+      const normalizedEmail = normalizeEmail(email);
+      const database = await this.readDatabase();
+      const account = database.users.find(
+        (candidate) => candidate.normalizedEmail === normalizedEmail,
+      );
+
+      if (!account) {
+        throw new InvalidEmailCodeError();
       }
 
-      if (
-        await verifyPassword(
-          validatedPassword,
-          account.passwordSalt,
-          account.passwordHash,
-        )
-      ) {
-        throw new InvalidNewPasswordError("新密码不能与当前密码相同。");
-      }
-
-      const password = await hashPassword(validatedPassword);
-      account.passwordHash = password.hash;
-      account.passwordSalt = password.salt;
-      account.passwordVersion += 1;
-      account.skillTokenVersion += 1;
-      await this.writeDatabase(database);
-      return account.passwordVersion;
+      const passwordVersion = await this.applyEmailCodePasswordReset(
+        database,
+        account,
+        emailCode,
+        validatedPassword,
+      );
+      return { id: account.id, passwordVersion };
     });
   }
 

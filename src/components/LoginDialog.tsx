@@ -1,6 +1,10 @@
 import { useEffect, useState, type FormEvent } from "react";
 import type { AuthUser } from "../lib/auth.js";
-import { registerUser, sendEmailCode } from "../lib/auth.js";
+import {
+  registerUser,
+  resetUserPassword,
+  sendEmailCode,
+} from "../lib/auth.js";
 import { SliderCaptcha } from "./SliderCaptcha.js";
 
 interface LoginDialogProps {
@@ -15,7 +19,7 @@ interface LoginDialogProps {
   onClose?: () => void;
 }
 
-type LoginMode = "login" | "register";
+type LoginMode = "forgot" | "login" | "register";
 
 export function LoginDialog({
   isAdmin = false,
@@ -32,6 +36,7 @@ export function LoginDialog({
   const [isSendingCode, setIsSendingCode] = useState(false);
   const [codeCountdown, setCodeCountdown] = useState(0);
   const [codeNotice, setCodeNotice] = useState("");
+  const [notice, setNotice] = useState("");
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [remember, setRemember] = useState(true);
   const [captchaToken, setCaptchaToken] = useState("");
@@ -40,6 +45,7 @@ export function LoginDialog({
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const isRegisterMode = !isAdmin && mode === "register";
+  const isForgotMode = !isAdmin && mode === "forgot";
 
   function resetCaptcha() {
     setCaptchaToken("");
@@ -61,6 +67,7 @@ export function LoginDialog({
   function switchMode(nextMode: LoginMode) {
     setMode(nextMode);
     setError("");
+    setNotice("");
     setConfirmPassword("");
     setEmailCode("");
     setCodeNotice("");
@@ -85,7 +92,11 @@ export function LoginDialog({
     try {
       setIsSendingCode(true);
       setError("");
-      await sendEmailCode({ captchaToken, email, purpose: "register" });
+      await sendEmailCode({
+        captchaToken,
+        email,
+        purpose: isForgotMode ? "reset" : "register",
+      });
       setCodeNotice("验证码已发送，请查收邮箱（10 分钟内有效）。");
       setCodeCountdown(60);
     } catch (sendError) {
@@ -106,7 +117,7 @@ export function LoginDialog({
       return;
     }
 
-    if (isRegisterMode) {
+    if (isRegisterMode || isForgotMode) {
       if (password.length < 8 || password.length > 128) {
         setError("新密码长度应为 8–128 个字符。");
         resetCaptcha();
@@ -135,6 +146,19 @@ export function LoginDialog({
     try {
       setIsSubmitting(true);
       setError("");
+
+      if (isForgotMode) {
+        await resetUserPassword(email, emailCode, password, captchaToken);
+        setPassword("");
+        setConfirmPassword("");
+        setEmailCode("");
+        setCodeNotice("");
+        setMode("login");
+        setNotice("密码已重置，请用新密码登录。");
+        resetCaptcha();
+        return;
+      }
+
       const user = isRegisterMode
         ? await registerUser(username, password, captchaToken, email, emailCode)
         : await login(username, password, remember, captchaToken);
@@ -214,27 +238,35 @@ export function LoginDialog({
         )}
 
         <form className="login-dialog-form" onSubmit={handleSubmit}>
-          <label>
-            <span className="visually-hidden">用户名或邮箱</span>
-            <input
-              type="text"
-              name="username"
-              autoComplete="username"
-              placeholder="用户名或邮箱"
-              value={username}
-              required
-              autoFocus
-              onChange={(event) => setUsername(event.target.value)}
-            />
-          </label>
+          {isForgotMode ? null : (
+            <label>
+              <span className="visually-hidden">用户名或邮箱</span>
+              <input
+                type="text"
+                name="username"
+                autoComplete="username"
+                placeholder="用户名或邮箱"
+                value={username}
+                required
+                autoFocus
+                onChange={(event) => setUsername(event.target.value)}
+              />
+            </label>
+          )}
 
           <label className="login-dialog-password-field">
-            <span className="visually-hidden">密码</span>
+            <span className="visually-hidden">
+              {isRegisterMode || isForgotMode ? "新密码" : "密码"}
+            </span>
             <input
               type={isPasswordVisible ? "text" : "password"}
               name="password"
-              autoComplete={isRegisterMode ? "new-password" : "current-password"}
-              placeholder="密码"
+              autoComplete={
+                isRegisterMode || isForgotMode
+                  ? "new-password"
+                  : "current-password"
+              }
+              placeholder={isRegisterMode || isForgotMode ? "新密码" : "密码"}
               value={password}
               required
               onChange={(event) => setPassword(event.target.value)}
@@ -257,7 +289,7 @@ export function LoginDialog({
             </button>
           </label>
 
-          {isRegisterMode ? (
+          {isRegisterMode || isForgotMode ? (
             <label>
               <span className="visually-hidden">确认密码</span>
               <input
@@ -274,7 +306,7 @@ export function LoginDialog({
             </label>
           ) : null}
 
-          {isRegisterMode ? (
+          {isRegisterMode || isForgotMode ? (
             <>
               <label>
                 <span className="visually-hidden">邮箱</span>
@@ -282,7 +314,9 @@ export function LoginDialog({
                   type="email"
                   name="email"
                   autoComplete="email"
-                  placeholder="邮箱（用于接收验证码）"
+                  placeholder={
+                    isForgotMode ? "账号绑定的邮箱" : "邮箱（用于接收验证码）"
+                  }
                   value={email}
                   required
                   maxLength={254}
@@ -337,15 +371,29 @@ export function LoginDialog({
             onVerified={(token) => setCaptchaToken(token)}
           />
 
-          {!isRegisterMode ? (
-            <label className="login-dialog-remember">
-              <input
-                type="checkbox"
-                checked={remember}
-                onChange={(event) => setRemember(event.target.checked)}
-              />
-              <span>记住密码</span>
-            </label>
+          {!isAdmin && mode === "login" ? (
+            <>
+              <label className="login-dialog-remember">
+                <input
+                  type="checkbox"
+                  checked={remember}
+                  onChange={(event) => setRemember(event.target.checked)}
+                />
+                <span>记住密码</span>
+              </label>
+              <button
+                type="button"
+                className="login-dialog-forgot"
+                onClick={() => switchMode("forgot")}
+              >
+                忘记密码？
+              </button>
+              {notice ? (
+                <p className="login-dialog-code-notice" role="status">
+                  {notice}
+                </p>
+              ) : null}
+            </>
           ) : null}
 
           {error ? (
@@ -360,19 +408,30 @@ export function LoginDialog({
             disabled={
               isSubmitting ||
               !captchaToken ||
-              !username.trim() ||
-              !password ||
-              (isRegisterMode &&
-                (!confirmPassword || !email.trim() || emailCode.length !== 6))
+              (isForgotMode
+                ? !email.trim() ||
+                  !password ||
+                  !confirmPassword ||
+                  emailCode.length !== 6
+                : !username.trim() ||
+                  !password ||
+                  (isRegisterMode &&
+                    (!confirmPassword ||
+                      !email.trim() ||
+                      emailCode.length !== 6)))
             }
           >
             {isSubmitting
               ? isRegisterMode
                 ? "注册中..."
-                : "登录中..."
+                : isForgotMode
+                  ? "重置中..."
+                  : "登录中..."
               : isRegisterMode
                 ? "注册"
-                : "登录"}
+                : isForgotMode
+                  ? "重置密码"
+                  : "登录"}
           </button>
         </form>
 
@@ -381,7 +440,9 @@ export function LoginDialog({
             ? "管理员凭据由服务端环境变量提供。"
             : isRegisterMode
               ? "注册后便签自动保存到云端，并支持跨设备同步。"
-              : "登录后便签自动保存到云端，并支持跨设备同步。"}
+              : isForgotMode
+                ? "通过账号绑定的邮箱验证码重置密码，未绑邮箱的账号请先登录后绑定。"
+                : "登录后便签自动保存到云端，并支持跨设备同步。"}
         </p>
         {isAdmin ? null : (
           <a className="login-dialog-public-link" href="/public">

@@ -2459,7 +2459,12 @@ export default function App() {
 
       {isChangePasswordOpen ? (
         <ChangePasswordDialog
+          boundEmail={currentEmail}
           changePassword={changeUserPassword}
+          onBindEmail={() => {
+            setIsChangePasswordOpen(false);
+            setIsBindEmailOpen(true);
+          }}
           onClose={() => setIsChangePasswordOpen(false)}
         />
       ) : null}

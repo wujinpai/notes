@@ -206,7 +206,7 @@ async function startServer(context: { after: (fn: () => Promise<void>) => void }
 async function requestEmailCode(
   server: TestServer,
   email: string,
-  purpose: "bind" | "register",
+  purpose: "bind" | "register" | "reset",
   cookie?: string,
 ): Promise<string> {
   const response = await postJson(
@@ -602,4 +602,261 @@ test("超管 SMTP 设置仅超管可用、密码只回遮罩、测试失败信�
     username: "frank",
   });
   assert.equal(frankRegister.status, 200);
+});
+
+test("找回密码统一响应且不可串用其他用途验证码，重置后全部旧会话失效", async (context) => {
+  const server = await startServer(context);
+  const { baseUrl } = server;
+
+  const graceCode = await requestEmailCode(server, "grace@example.com", "register");
+  const graceRegister = await postJson(baseUrl, "/api/auth/register", {
+    captchaToken: await getCaptchaToken(baseUrl),
+    email: "grace@example.com",
+    emailCode: graceCode,
+    password: "grace-password-2026",
+    username: "grace",
+  });
+  assert.equal(graceRegister.status, 200);
+
+  async function loginGrace(password: string): Promise<Response> {
+    return postJson(baseUrl, "/api/auth/login", {
+      captchaToken: await getCaptchaToken(baseUrl),
+      password,
+      remember: false,
+      username: "grace",
+    });
+  }
+
+  const loginA = await loginGrace("grace-password-2026");
+  assert.equal(loginA.status, 200);
+  const cookieA = getCookie(loginA);
+  const loginB = await loginGrace("grace-password-2026");
+  assert.equal(loginB.status, 200);
+  const cookieB = getCookie(loginB);
+
+  // 邮箱不存在：发码统一返回成功，不生成验证码、不写日志。
+  const unknownSend = await postJson(baseUrl, "/api/auth/email-code", {
+    captchaToken: await getCaptchaToken(baseUrl),
+    email: "nobody@example.com",
+    purpose: "reset",
+  });
+  assert.equal(unknownSend.status, 200);
+  assert.deepEqual(await unknownSend.json(), { ok: true });
+  assert.ok(!server.getStdout().includes("nobody@example.com"));
+
+  const unknownReset = await postJson(baseUrl, "/api/auth/reset-password", {
+    captchaToken: await getCaptchaToken(baseUrl),
+    email: "nobody@example.com",
+    emailCode: "123456",
+    newPassword: "nobody-password-2026",
+  });
+  assert.equal(unknownReset.status, 400);
+
+  // 注册验证码不能用于找回密码（purpose 隔离）。
+  const karenRegisterCode = await requestEmailCode(
+    server,
+    "karen@example.com",
+    "register",
+  );
+  const resetWithRegisterCode = await postJson(
+    baseUrl,
+    "/api/auth/reset-password",
+    {
+      captchaToken: await getCaptchaToken(baseUrl),
+      email: "karen@example.com",
+      emailCode: karenRegisterCode,
+      newPassword: "karen-password-2026",
+    },
+  );
+  assert.equal(resetWithRegisterCode.status, 400);
+
+  // karen 的注册验证码未被上面的失败尝试消费，仍可正常注册。
+  const karenRegister = await postJson(baseUrl, "/api/auth/register", {
+    captchaToken: await getCaptchaToken(baseUrl),
+    email: "karen@example.com",
+    emailCode: karenRegisterCode,
+    password: "karen-password-2026",
+    username: "karen",
+  });
+  assert.equal(karenRegister.status, 200);
+
+  const resetCode = await requestEmailCode(server, "grace@example.com", "reset");
+
+  // 重置验证码不能用于注册（邮箱与用途双重绑定）。
+  const registerWithResetCode = await postJson(baseUrl, "/api/auth/register", {
+    captchaToken: await getCaptchaToken(baseUrl),
+    email: "karen2@example.com",
+    emailCode: resetCode,
+    password: "karen2-password-2026",
+    username: "karen2",
+  });
+  assert.equal(registerWithResetCode.status, 400);
+
+  // 绑定验证码不能用于找回密码（purpose 隔离，收件邮箱即本人绑定邮箱）。
+  const bindCode = await requestEmailCode(
+    server,
+    "grace@example.com",
+    "bind",
+    cookieA,
+  );
+  const resetWithBindCode = await postJson(baseUrl, "/api/auth/reset-password", {
+    captchaToken: await getCaptchaToken(baseUrl),
+    email: "grace@example.com",
+    emailCode: bindCode,
+    newPassword: "grace-password-x1",
+  });
+  assert.equal(resetWithBindCode.status, 400);
+
+  const resetWrongCode = await postJson(baseUrl, "/api/auth/reset-password", {
+    captchaToken: await getCaptchaToken(baseUrl),
+    email: "grace@example.com",
+    emailCode: "000000",
+    newPassword: "grace-password-x1",
+  });
+  assert.equal(resetWrongCode.status, 400);
+
+  const resetOk = await postJson(baseUrl, "/api/auth/reset-password", {
+    captchaToken: await getCaptchaToken(baseUrl),
+    email: "grace@example.com",
+    emailCode: resetCode,
+    newPassword: "grace-password-x1",
+  });
+  assert.equal(resetOk.status, 200);
+  assert.deepEqual(await resetOk.json(), { ok: true });
+
+  // 验证码消费后不可重放。
+  const resetReplay = await postJson(baseUrl, "/api/auth/reset-password", {
+    captchaToken: await getCaptchaToken(baseUrl),
+    email: "grace@example.com",
+    emailCode: resetCode,
+    newPassword: "grace-password-x2",
+  });
+  assert.equal(resetReplay.status, 400);
+
+  // 重置前签发的全部会话都已失效。
+  for (const cookie of [cookieA, cookieB]) {
+    const emailResponse = await fetch(`${baseUrl}/api/auth/email`, {
+      headers: { Cookie: cookie },
+    });
+    assert.equal(emailResponse.status, 401);
+  }
+
+  const oldLogin = await loginGrace("grace-password-2026");
+  assert.equal(oldLogin.status, 401);
+  const newLogin = await loginGrace("grace-password-x1");
+  assert.equal(newLogin.status, 200);
+});
+
+test("设置改密改用绑定邮箱验证码，当前会话续签而其他会话失效，未绑邮箱先提示绑定", async (context) => {
+  const server = await startServer(context);
+  const { baseUrl } = server;
+
+  const heidiCode = await requestEmailCode(server, "heidi@example.com", "register");
+  const heidiRegister = await postJson(baseUrl, "/api/auth/register", {
+    captchaToken: await getCaptchaToken(baseUrl),
+    email: "heidi@example.com",
+    emailCode: heidiCode,
+    password: "heidi-password-2026",
+    username: "heidi",
+  });
+  assert.equal(heidiRegister.status, 200);
+
+  async function loginHeidi(password: string): Promise<Response> {
+    return postJson(baseUrl, "/api/auth/login", {
+      captchaToken: await getCaptchaToken(baseUrl),
+      password,
+      remember: false,
+      username: "heidi",
+    });
+  }
+
+  const loginC = await loginHeidi("heidi-password-2026");
+  assert.equal(loginC.status, 200);
+  const cookieC = getCookie(loginC);
+  const loginD = await loginHeidi("heidi-password-2026");
+  assert.equal(loginD.status, 200);
+  const cookieD = getCookie(loginD);
+
+  const changeWithoutCode = await postJson(
+    baseUrl,
+    "/api/auth/password",
+    { newPassword: "heidi-password-x1" },
+    cookieC,
+  );
+  assert.equal(changeWithoutCode.status, 400);
+
+  const changeWrongCode = await postJson(
+    baseUrl,
+    "/api/auth/password",
+    { emailCode: "000000", newPassword: "heidi-password-x1" },
+    cookieC,
+  );
+  assert.equal(changeWrongCode.status, 400);
+
+  const changeCode = await requestEmailCode(
+    server,
+    "heidi@example.com",
+    "reset",
+    cookieC,
+  );
+  const changeOk = await postJson(
+    baseUrl,
+    "/api/auth/password",
+    { emailCode: changeCode, newPassword: "heidi-password-x1" },
+    cookieC,
+  );
+  assert.equal(changeOk.status, 200);
+  const renewedCookie = getCookie(changeOk);
+
+  // 当前会话靠续签 Cookie 继续可用，其他旧会话全部失效。
+  const renewedEmail = await fetch(`${baseUrl}/api/auth/email`, {
+    headers: { Cookie: renewedCookie },
+  });
+  assert.equal(renewedEmail.status, 200);
+  assert.deepEqual(await renewedEmail.json(), {
+    email: "heidi@example.com",
+  });
+
+  for (const cookie of [cookieC, cookieD]) {
+    const staleResponse = await fetch(`${baseUrl}/api/auth/email`, {
+      headers: { Cookie: cookie },
+    });
+    assert.equal(staleResponse.status, 401);
+  }
+
+  const oldLogin = await loginHeidi("heidi-password-2026");
+  assert.equal(oldLogin.status, 401);
+  const newLogin = await loginHeidi("heidi-password-x1");
+  assert.equal(newLogin.status, 200);
+
+  // 未绑定邮箱的老账号改密时先提示去绑定邮箱。
+  const adminCookie = await superadminCookie(server);
+  const createLeo = await postJson(
+    baseUrl,
+    "/api/superadmin/users",
+    { username: "leo" },
+    adminCookie,
+  );
+  assert.equal(createLeo.status, 201);
+  const leo = (await createLeo.json()) as {
+    user: { initialPassword: string };
+  };
+  const leoLogin = await postJson(baseUrl, "/api/auth/login", {
+    captchaToken: await getCaptchaToken(baseUrl),
+    password: leo.user.initialPassword,
+    remember: false,
+    username: "leo",
+  });
+  assert.equal(leoLogin.status, 200);
+  const leoCookie = getCookie(leoLogin);
+
+  const leoChange = await postJson(
+    baseUrl,
+    "/api/auth/password",
+    { emailCode: "123456", newPassword: "leo-password-2026" },
+    leoCookie,
+  );
+  assert.equal(leoChange.status, 400);
+  const leoPayload = (await leoChange.json()) as { error: string };
+  assert.match(leoPayload.error, /请先绑定邮箱/);
 });

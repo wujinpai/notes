@@ -11110,6 +11110,21 @@ body.promo-studio-active {
   color: #2e7d4f !important;
 }
 
+.login-dialog-forgot {
+  justify-self: end;
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  color: #8a7a70;
+  font: 13px var(--ui-font);
+  cursor: pointer;
+}
+
+.login-dialog-forgot:hover {
+  color: #5f5149;
+  text-decoration: underline;
+}
+
 @media (max-width: 640px) {
   .superadmin-smtp-form {
     grid-template-columns: minmax(0, 1fr);

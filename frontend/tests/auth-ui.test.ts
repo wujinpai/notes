@@ -53,7 +53,7 @@ test("登录弹窗源码提供自助注册模式与滑块验证接入", () => {
   assert.match(loginSource, /账号密码登录/);
   assert.match(loginSource, /注册账号/);
   assert.match(loginSource, /确认密码/);
-  assert.match(loginSource, /autoComplete=\{isRegisterMode \? "new-password" : "current-password"\}/);
+  assert.match(loginSource, /isRegisterMode \|\| isForgotMode\s*\? "new-password"\s*: "current-password"/);
   assert.match(loginSource, /name="confirmPassword"/);
   assert.match(loginSource, /两次输入的密码不一致/);
   assert.match(loginSource, /<SliderCaptcha/);
@@ -74,23 +74,25 @@ test("登录弹窗源码提供自助注册模式与滑块验证接入", () => {
   assert.match(styles, /\.slider-captcha-handle\s*\{/);
 });
 
-test("普通用户修改密码表单使用当前密码与新密码语义", () => {
+test("普通用户修改密码表单使用绑定邮箱验证码与新密码语义", () => {
   const html = renderToStaticMarkup(
     createElement(ChangePasswordDialog, {
+      boundEmail: "user@example.com",
       changePassword: async () => undefined,
+      onBindEmail: () => undefined,
       onClose: () => undefined,
     }),
   );
 
   assert.match(html, /role="dialog"/);
   assert.match(html, />修改密码</);
-  assert.match(html, />当前密码</);
+  assert.doesNotMatch(html, />当前密码</);
+  assert.match(html, /user@example\.com/);
+  assert.match(html, />邮箱验证码</);
+  assert.match(html, /获取验证码/);
+  assert.match(html, /class="slider-captcha"/);
   assert.match(html, />新密码</);
   assert.match(html, />确认新密码</);
-  assert.match(
-    html,
-    /<input[^>]*autoComplete="current-password"[^>]*name="currentPassword"/,
-  );
   assert.match(
     html,
     /<input[^>]*autoComplete="new-password"[^>]*name="newPassword"/,
@@ -101,6 +103,19 @@ test("普通用户修改密码表单使用当前密码与新密码语义", () =>
   );
   assert.match(html, /minLength="8"/);
   assert.match(html, /其他设备需要使用新密码重新登录/);
+
+  const unboundHtml = renderToStaticMarkup(
+    createElement(ChangePasswordDialog, {
+      boundEmail: null,
+      changePassword: async () => undefined,
+      onBindEmail: () => undefined,
+      onClose: () => undefined,
+    }),
+  );
+
+  assert.match(unboundHtml, /尚未绑定邮箱/);
+  assert.match(unboundHtml, /去绑定邮箱/);
+  assert.doesNotMatch(unboundHtml, /获取验证码/);
 });
 
 test("普通用户和 superadmin 都拥有云便签能力", () => {

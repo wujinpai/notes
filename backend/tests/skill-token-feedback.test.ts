@@ -167,6 +167,28 @@ async function getCaptchaToken(baseUrl: string): Promise<string> {
   return captchaToken;
 }
 
+async function waitForEmailCode(
+  getStdout: () => string,
+  email: string,
+): Promise<string> {
+  const deadline = Date.now() + 10_000;
+  const escapedEmail = email.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = new RegExp(`邮箱 ${escapedEmail} 的验证码为 (\\d{6})`, "g");
+
+  while (Date.now() < deadline) {
+    const matches = [...getStdout().matchAll(pattern)];
+    const match = matches[matches.length - 1];
+
+    if (match) {
+      return match[1];
+    }
+
+    await delay(50);
+  }
+
+  throw new Error(`等待邮箱 ${email} 的验证码日志超时`);
+}
+
 test("Skill Token 可自动换取、持久化、下载 ZIP，并在改密后失效", async (context) => {
   const port = await getUnusedPort();
   const dataDir = await mkdtemp(path.join(tmpdir(), "notes-token-data-"));
@@ -431,10 +453,49 @@ test("Skill Token 可自动换取、持久化、下载 ZIP，并在改密后失�
     );
     assert.match(await readFile(tokenOnlyEnvFile, "utf8"), /wrong-password/);
 
+    // 改密改用绑定邮箱验证码：先绑定邮箱，再凭 reset 验证码改密。
+    const skillUserEmail = "feedback-token-user@example.com";
+    const sendBindCode = await postJson(
+      baseUrl,
+      "/api/auth/email-code",
+      {
+        captchaToken: await getCaptchaToken(baseUrl),
+        email: skillUserEmail,
+        purpose: "bind",
+      },
+      userCookie,
+    );
+    assert.equal(sendBindCode.status, 200);
+    const bindCode = await waitForEmailCode(() => stdout, skillUserEmail);
+    const bindEmail = await postJson(
+      baseUrl,
+      "/api/auth/email/bind",
+      {
+        currentPassword: initialPassword,
+        email: skillUserEmail,
+        emailCode: bindCode,
+      },
+      userCookie,
+    );
+    assert.equal(bindEmail.status, 200);
+
+    const sendResetCode = await postJson(
+      baseUrl,
+      "/api/auth/email-code",
+      {
+        captchaToken: await getCaptchaToken(baseUrl),
+        email: skillUserEmail,
+        purpose: "reset",
+      },
+      userCookie,
+    );
+    assert.equal(sendResetCode.status, 200);
+    const resetCode = await waitForEmailCode(() => stdout, skillUserEmail);
+
     const passwordChange = await postJson(
       baseUrl,
       "/api/auth/password",
-      { currentPassword: initialPassword, newPassword: "feedback-new-password" },
+      { emailCode: resetCode, newPassword: "feedback-new-password" },
       userCookie,
     );
     assert.equal(passwordChange.status, 200);
